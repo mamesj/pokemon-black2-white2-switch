@@ -21,6 +21,9 @@
 #else
 #include <unistd.h>
 #endif
+#ifdef __APPLE__
+#include <mach-o/dyld.h>
+#endif
 #ifdef __ANDROID__
 #include <jni.h>
 #endif
@@ -806,6 +809,12 @@ void Finish()
         CloseHandle(pi.hThread);
         CloseHandle(pi.hProcess);
     }
+#elif defined(__APPLE__)
+    // (No /proc on macOS: the program's own path, inside its .app, from dyld.)
+    char self[4096];
+    uint32_t size = sizeof self;
+    if (_NSGetExecutablePath(self, &size) != 0) return;
+    execl(self, self, (char*)nullptr);
 #else
     char self[4096];
     const ssize_t n = readlink("/proc/self/exe", self, sizeof self - 1);

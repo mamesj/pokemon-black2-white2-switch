@@ -2,7 +2,7 @@
 // list, which starts that game straight away ("--game IREO"), with the game's picture as its icon.
 // Windows: a .lnk on the desktop and an .ico beside the program (shortcut-icons/). Linux: a
 // .desktop file in the applications menu (~/.local/share/applications) and on the desktop, with a
-// .png icon.
+// .png icon. macOS: a small .app (a script and an .icns) in ~/Applications and on the desktop.
 #pragma once
 
 #include <algorithm>
@@ -24,6 +24,9 @@
 #else
 #include <cstdlib>
 #include <unistd.h>
+#endif
+#ifdef __APPLE__
+#include <mach-o/dyld.h>
 #endif
 
 #include "launcher.h"
@@ -175,6 +178,28 @@ inline std::vector<uint8_t> Ico(const Launcher::Game& g)
 }
 #endif
 
+#ifdef __APPLE__
+// An .icns holding the picture as PNGs at 128, 256 and 512 pixels (ic07, ic08, ic09).
+inline std::vector<uint8_t> Icns(const Launcher::Game& g)
+{
+    const struct { const char* type; int size; } kinds[] = { { "ic07", 128 }, { "ic08", 256 }, { "ic09", 512 } };
+    std::vector<uint8_t> out = { 'i', 'c', 'n', 's', 0, 0, 0, 0 };
+    auto u32 = [&](uint32_t v) { for (int s = 24; s >= 0; s -= 8) out.push_back((v >> s) & 255); };
+    for (const auto& k : kinds)
+    {
+        const std::vector<uint32_t> px = Picture(g, k.size);
+        if (px.empty()) return {};
+        const std::vector<uint8_t> png = Png(px, k.size, k.size);
+        out.insert(out.end(), k.type, k.type + 4);
+        u32(8 + (uint32_t)png.size());
+        out.insert(out.end(), png.begin(), png.end());
+    }
+    const uint32_t total = (uint32_t)out.size();
+    for (int i = 0; i < 4; i++) out[4 + i] = (total >> (24 - 8 * i)) & 255;
+    return out;
+}
+#endif
+
 // Makes the shortcuts: one per game (once each, the first of any in several folders). dir is
 // the program's folder (for the icons). Returns how many were made; where says where they went,
 // or what failed.
@@ -226,6 +251,63 @@ inline int Make(const std::string& dir, const std::vector<Launcher::Game>& games
     // Explorer redraws the desktop with the new icons.
     SHChangeNotify(SHCNE_ASSOCCHANGED, SHCNF_IDLIST, nullptr, nullptr);
     where = "ON YOUR DESKTOP";
+#elif defined(__APPLE__)
+    char exe[4096];
+    uint32_t size = sizeof exe;
+    if (_NSGetExecutablePath(exe, &size) != 0)
+    {
+        where = "NO PROGRAM PATH";
+        return 0;
+    }
+    const char* homeEnv = getenv("HOME");
+    const std::string home = homeEnv ? homeEnv : "";
+    // ~/Applications, where Spotlight and Launchpad find the games, and the desktop.
+    const std::string apps = home + "/Applications";
+    mkdir(apps.c_str(), 0755);
+    const std::string desk = home + "/Desktop";
+    struct stat st;
+    const bool hasDesk = stat(desk.c_str(), &st) == 0 && S_ISDIR(st.st_mode);
+    // (The program's path in single quotes for the script, each quote in it as '\''.)
+    std::string quoted = "'";
+    for (char c : std::string(exe)) quoted += c == '\'' ? std::string("'\\''") : std::string(1, c);
+    quoted += "'";
+    for (const Launcher::Game& g : games)
+    {
+        if (!g.known || !done.insert(g.code).second) continue;
+        std::string lower = g.code;
+        for (char& c : lower) c = (char)tolower((unsigned char)c);
+        // The app is a shell script that starts the program on the game; the program, inside
+        // its own .app, still finds its folder (SDL_FILESYSTEM_BASE_DIR_TYPE parent).
+        const std::string script = "#!/bin/sh\nexec " + quoted + " --game " + g.code + "\n";
+        const std::string plist =
+            "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n"
+            "<!DOCTYPE plist PUBLIC \"-//Apple//DTD PLIST 1.0//EN\" \"http://www.apple.com/DTDs/PropertyList-1.0.dtd\">\n"
+            "<plist version=\"1.0\">\n<dict>\n"
+            "    <key>CFBundleExecutable</key><string>launch</string>\n"
+            "    <key>CFBundleIconFile</key><string>icon</string>\n"
+            "    <key>CFBundleIdentifier</key><string>io.github.mamesj.pokemonds." + lower + "</string>\n"
+            "    <key>CFBundleName</key><string>" + Title(g) + "</string>\n"
+            "    <key>CFBundlePackageType</key><string>APPL</string>\n"
+            "    <key>LSApplicationCategoryType</key><string>public.app-category.games</string>\n"
+            "    <key>LSMinimumSystemVersion</key><string>11.0</string>\n"
+            "</dict>\n</plist>\n";
+        const std::vector<uint8_t> icns = Icns(g);
+        bool ok = true;
+        for (const std::string& base : { apps, desk })
+        {
+            if (base == desk && !hasDesk) continue;
+            const std::string app = base + "/" + Title(g) + ".app";
+            for (const char* sub : { "", "/Contents", "/Contents/MacOS", "/Contents/Resources" })
+                mkdir((app + sub).c_str(), 0755);
+            ok = WriteFile(app + "/Contents/Info.plist", std::vector<uint8_t>(plist.begin(), plist.end())) && ok;
+            const std::string run = app + "/Contents/MacOS/launch";
+            ok = WriteFile(run, std::vector<uint8_t>(script.begin(), script.end())) && chmod(run.c_str(), 0755) == 0 && ok;
+            if (!icns.empty()) WriteFile(app + "/Contents/Resources/icon.icns", icns);
+        }
+        if (ok) made++;
+        fprintf(stderr, "[launcher] shortcut for %s\n", g.code.c_str());
+    }
+    where = hasDesk ? "ON YOUR DESKTOP AND IN YOUR APPS" : "IN YOUR APPS";
 #else
     mkdir(iconDir.c_str(), 0755);
     char exe[4096];

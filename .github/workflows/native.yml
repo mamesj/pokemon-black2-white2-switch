@@ -29,6 +29,19 @@ jobs:
       - name: Check Mac minimum OS and library dependencies
         if: runner.os == 'macOS'
         run: python tools/macos/check_binary.py '${{ runner.temp }}/ssrecomp smoke/native/ssrecomp' --max-macos 11.0 --system-libraries-only
+      # The Mac all-in-one program (tools/pc/build_all.sh mac) needs a ROM for its tables; here it
+      # is compiled on the smoke test's synthetic fixture instead: the game list, the JIT, no OpenGL.
+      - name: Mac all-in-one program
+        if: runner.os == 'macOS'
+        run: |
+          out='${{ runner.temp }}/pc-mac'
+          cmake -S . -B "$out" -G Ninja -DCMAKE_BUILD_TYPE=Release -DSSR_JIT=ON -DSSR_PC_ALL_GAMES=ON \
+            -DSSR_PNG=OFF -DSSR_GPU3D=OFF -DSSR_PORTABLE_X86=ON \
+            -DSSR_GENERATED_DIR='${{ runner.temp }}/ssrecomp smoke/generated fixtures with spaces'
+          cmake --build "$out" --target ssrecomp --parallel 3
+          rc=0; "$out/ssrecomp" --help 2> "$out/help.txt" || rc=$?
+          test "$rc" = 2 && grep -q 'usage: ssrecomp' "$out/help.txt"
+          python tools/macos/check_binary.py "$out/ssrecomp" --max-macos 11.0 --system-libraries-only
   windows:
     runs-on: windows-latest
     defaults:

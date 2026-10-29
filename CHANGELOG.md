@@ -6,6 +6,10 @@
   questions answered only by touch (Platinum's first YES / NO with Professor Rowan) could not be
   answered. Docked (or handheld), the right stick moves a cursor and ZL touches; pressing the
   right stick in shows the other screen.
+- **Mac: the all-in-one program**, built on a Mac with `tools/pc/build_all.sh mac`: Pokemon DS
+  Launcher.app with the game list, as on a PC. DESKTOP SHORTCUTS makes an app for each game on
+  the desktop and in your Applications folder (Spotlight and Launchpad find them). The processor
+  draws the world (WORLD ON GPU is not available).
 - **Switch: HOME MENU ICONS** in the all-in-one's settings (Y in the list): an icon on the HOME
   Menu for each game, with its box art, that starts the game straight away. Made on the console
   (no PC or keys file); like any forwarder they need sigpatches. The list shows box art for every
