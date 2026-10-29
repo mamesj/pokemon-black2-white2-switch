@@ -6,6 +6,7 @@
 #   tools/pc/build_all.sh windows your-soulsilver-us.nds
 #   tools/pc/build_all.sh linux   your-soulsilver-us.nds
 #   tools/pc/build_all.sh both    your-soulsilver-us.nds
+#   tools/pc/build_all.sh mac     your-soulsilver-us.nds    (on a Mac)
 #
 # As for the Switch's all-games download (tools/switch/build_game.sh all), the SoulSilver ROM is
 # only read for the addresses in SoulSilver and HeartGold's tables, and the Black games' function
@@ -14,8 +15,11 @@
 # The results, in build-pc-dist/:
 #   pokemon-ds-wide-pc-windows-x86_64.zip   Pokemon DS Launcher.exe, SDL2.dll, data/, roms/
 #   pokemon-ds-wide-pc-linux-x86_64.tar.gz  pokemon-ds-wide, libSDL2-2.0.so.0, data/, roms/
+#   pokemon-ds-wide-pc-macos-arm64.zip      Pokemon DS Launcher.app, data/, roms/
 #
-# Needs Linux or WSL2 (Ubuntu 24.04) with git, CMake, Ninja, Python 3 and curl; for Windows also
+# The Mac build needs a Mac with the Xcode Command Line Tools, git, CMake, Ninja, Python 3 and
+# curl (Homebrew: brew install cmake ninja); SDL2 is built into the program.
+# The others need Linux or WSL2 (Ubuntu 24.04) with git, CMake, Ninja, Python 3 and curl; for Windows also
 # MinGW-w64 (sudo apt install g++-mingw-w64-x86-64-posix), for Linux SDL2's development files
 # (sudo apt install libsdl2-dev). SDL2 for Windows is SDL's own MinGW package, fetched once into
 # build-pc-deps/ and checked against its known checksum. The Windows program's icon:
@@ -42,10 +46,15 @@ SDL_SRC_SHA256=24b574f71c87a763f50704bbb630cbe38298d544a1f890f099a4696b1d6beba4
 say() { printf '\n== %s\n' "$*"; }
 fail() { printf '\nerror: %s\n' "$*" >&2; exit 1; }
 
+WINDOWS=0 LINUX=0 MAC=0
 case "$TARGET" in
-    windows|linux|both) ;;
-    *) fail "which? tools/pc/build_all.sh windows|linux|both your-soulsilver-us.nds" ;;
+    windows) WINDOWS=1 ;;
+    linux) LINUX=1 ;;
+    both) WINDOWS=1 LINUX=1 ;;
+    mac) MAC=1 ;;
+    *) fail "which? tools/pc/build_all.sh windows|linux|both|mac your-soulsilver-us.nds" ;;
 esac
+[ "$MAC" = 0 ] || [ "$(uname -s)" = Darwin ] || fail "the Mac program is built on a Mac"
 [ -n "$ROM" ] || fail "give your SoulSilver ROM (US): tools/pc/build_all.sh $TARGET your-soulsilver-us.nds"
 [ -f "$ROM" ] || fail "no such file: $ROM"
 [ "$(dd if="$ROM" bs=1 skip=12 count=4 2>/dev/null)" = IPGE ] ||
@@ -54,11 +63,11 @@ ROM="$(cd "$(dirname "$ROM")" && pwd)/$(basename "$ROM")"
 for tool in git cmake ninja python3 curl; do
     command -v "$tool" >/dev/null || fail "$tool is not installed (Ubuntu: sudo apt install git cmake ninja-build python3 curl)"
 done
-if [ "$TARGET" != linux ]; then
+if [ "$WINDOWS" = 1 ]; then
     command -v x86_64-w64-mingw32-g++-posix >/dev/null ||
         fail "MinGW-w64 is not installed (Ubuntu: sudo apt install g++-mingw-w64-x86-64-posix)"
 fi
-if [ "$TARGET" != windows ]; then
+if [ "$LINUX" = 1 ]; then
     { pkg-config --exists sdl2 2>/dev/null || [ -f /usr/include/SDL2/SDL.h ]; } ||
         fail "SDL2's development files are not installed (Ubuntu: sudo apt install libsdl2-dev)"
 fi
@@ -127,13 +136,13 @@ stage() {
 check_contents() { # list of paths, one per line, relative to the download's top folder
     python3 -c "
 import re, sys
-ok = re.compile(r'^pokemon-ds-wide/(pokemon-ds-wide|Pokemon DS Launcher\.exe|SDL2\.dll|libSDL2-2\.0\.so\.0|LICENSE\.txt|LICENSE-SDL2\.txt|README\.txt|roms/|data/|data/funcs/|data/funcs/(IREO|IRDO|IRBO|IRAO|CPUE)\.txt)?$')
+ok = re.compile(r'^pokemon-ds-wide/(pokemon-ds-wide|Pokemon DS Launcher\.exe|SDL2\.dll|libSDL2-2\.0\.so\.0|LICENSE\.txt|LICENSE-SDL2\.txt|README\.txt|roms/|data/|data/funcs/|data/funcs/(IREO|IRDO|IRBO|IRAO|CPUE)\.txt|Pokemon DS Launcher\.app/(Contents/(Info\.plist|MacOS/(pokemon-ds-wide)?|_CodeSignature/(CodeResources)?)?)?)?$')
 bad = [l for l in sys.stdin.read().splitlines() if l and not ok.match(l)]
 if bad: sys.exit('unexpected files in the download: %s' % bad)
 "
 }
 
-if [ "$TARGET" != linux ]; then
+if [ "$WINDOWS" = 1 ]; then
     DEPS="$HERE/build-pc-deps"
     SDL_ROOT="$DEPS/SDL2-$SDL_VERSION/x86_64-w64-mingw32"
     if [ ! -f "$SDL_ROOT/include/SDL2/SDL.h" ]; then
@@ -173,7 +182,7 @@ with zipfile.ZipFile(sys.argv[1], 'w', zipfile.ZIP_DEFLATED) as z:
     say "Done: $HERE/build-pc-dist/$ZIP"
 fi
 
-if [ "$TARGET" != windows ]; then
+if [ "$LINUX" = 1 ]; then
     # SDL2 comes with the download, built here from its source with its display and sound parts
     # (X11, Wayland, PulseAudio, ALSA) loaded only when used, so that it needs nothing but the C
     # library: SteamOS (the Steam Deck) and other systems without SDL2 run the download as it
@@ -209,11 +218,53 @@ if [ "$TARGET" != windows ]; then
     tar -tzf "build-pc-dist/$TGZ" | check_contents
     say "Done: $HERE/build-pc-dist/$TGZ"
 fi
+if [ "$MAC" = 1 ]; then
+    # The program in an .app, with the roms, saves and data folders beside the .app: SDL's
+    # SDL_GetBasePath, from which the game list finds them, gives the .app's own folder
+    # (SDL_FILESYSTEM_BASE_DIR_TYPE parent). SDL2 is built into the program
+    # (cmake/MacDependencies.cmake). No OpenGL here: the processor draws the world.
+    ARCH="$(uname -m)"
+    say "Compiling for macOS ($ARCH)"
+    cmake -S . -B build-pc-mac "${COMMON[@]}" -DSSR_GPU3D=OFF -DCMAKE_OSX_ARCHITECTURES="$ARCH" \
+        -DCMAKE_OSX_DEPLOYMENT_TARGET=11.0 >/dev/null
+    ninja -C build-pc-mac ssrecomp
+    OUT=build-pc-dist/mac/pokemon-ds-wide
+    stage "$OUT"
+    APP="$OUT/Pokemon DS Launcher.app"
+    mkdir -p "$APP/Contents/MacOS"
+    cp build-pc-mac/ssrecomp "$APP/Contents/MacOS/pokemon-ds-wide"
+    strip "$APP/Contents/MacOS/pokemon-ds-wide"
+    cat > "$APP/Contents/Info.plist" <<EOF
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>CFBundleExecutable</key><string>pokemon-ds-wide</string>
+    <key>CFBundleIdentifier</key><string>io.github.mamesj.pokemonds</string>
+    <key>CFBundleName</key><string>Pokemon DS Launcher</string>
+    <key>CFBundlePackageType</key><string>APPL</string>
+    <key>LSApplicationCategoryType</key><string>public.app-category.games</string>
+    <key>LSMinimumSystemVersion</key><string>11.0</string>
+    <key>NSHighResolutionCapable</key><true/>
+    <key>SDL_FILESYSTEM_BASE_DIR_TYPE</key><string>parent</string>
+</dict>
+</plist>
+EOF
+    # (Stripping undoes the linker's own signature, without which Apple silicon does not run a
+    # program: the .app is signed again, ad hoc.)
+    codesign --force --sign - "$APP"
+    cp build-pc-mac/_deps/ssr_sdl2-src/LICENSE.txt "$OUT/LICENSE-SDL2.txt"
+    ZIP=pokemon-ds-wide-pc-macos-$ARCH.zip
+    rm -f "build-pc-dist/$ZIP"
+    ditto -c -k --norsrc --noextattr --keepParent "$OUT" "build-pc-dist/$ZIP"
+    python3 -c "import sys, zipfile; print('\n'.join(zipfile.ZipFile(sys.argv[1]).namelist()))" "build-pc-dist/$ZIP" | check_contents
+    say "Done: $HERE/build-pc-dist/$ZIP"
+fi
 ls -l build-pc-dist/*.zip build-pc-dist/*.tar.gz 2>/dev/null
 cat <<EOF
 
 Unpack the download anywhere, put your ROMs in its roms folder (any names: English Black, White,
 Black 2 and White 2; SoulSilver, HeartGold and Platinum US) and start Pokemon DS Launcher.exe
-(Linux: pokemon-ds-wide).
+(Linux: pokemon-ds-wide; Mac: Pokemon DS Launcher.app).
 The downloads hold only the program: nothing of the games.
 EOF

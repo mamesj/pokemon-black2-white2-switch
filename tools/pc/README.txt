@@ -17,7 +17,8 @@ GETTING STARTED
 
 1. Unpack the download anywhere you like (not inside Program Files).
 2. Put your ROMs in the roms folder. Any file names are fine.
-3. Start Pokemon DS Launcher.exe (Windows) or pokemon-ds-wide (Linux).
+3. Start Pokemon DS Launcher.exe (Windows), pokemon-ds-wide (Linux) or Pokemon DS
+   Launcher.app (Mac).
 4. Pick a game from the list: arrow keys or a controller's D-pad, then Enter or A.
    You can also double-click a game. Press O in the list to open the roms folder, and H (or
    a controller's Y) for the settings: the Esc menu's options, each explained.
@@ -25,6 +26,9 @@ GETTING STARTED
 Windows may warn that the program is from an unknown publisher the first time: choose
 "More info", then "Run anyway".
 On Linux there is nothing else to install: SDL2 comes with it (libSDL2-2.0.so.0).
+On a Mac, keep Pokemon DS Launcher.app in its folder, beside roms, saves and data (to start it
+from the Dock, drag it there rather than moving it). The processor draws the world: WORLD ON
+GPU shows NOT AVAILABLE.
 
 
 STEAM DECK
