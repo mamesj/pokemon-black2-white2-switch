@@ -15,6 +15,11 @@ import struct
 import sys
 
 TOOLS = Path(__file__).resolve().parents[1]
+# Names that frontend/main.cpp puts together instead of spelling out, so the search for quoted
+# names cannot see them: each weather with particles and its phases (bw2.weatherObj).
+COMPOSED = {weather + phase
+            for weather in ('Flake', 'Blizzard', 'Flutter', 'Speck', 'Rain', 'Thunder', 'GustyRain', 'Sandstorm')
+            for phase in ('_Main', '_FadeIn', '_FadeOut')}
 sys.path.insert(0, str(TOOLS))
 sys.path.insert(0, str(TOOLS / 'bw1'))
 from ndsrom import read_rom
@@ -106,6 +111,7 @@ def match(reference_path, target_path, table_path, frontend):
     for path in frontend:
         literals.update(re.findall(r'"([A-Za-z_][A-Za-z_0-9]+)"', Path(path).read_text(encoding='utf-8')))
     literals -= {'input', 'main', 'update'}
+    literals |= COMPOSED
     resolved, required, missing = [], [], []
     for module, funcs in modules.items():
         if module not in source or module not in target:
