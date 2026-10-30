@@ -1532,6 +1532,7 @@ bool Start(int& argc, char**& argv)
             o.saves = games[chosen].folder;
             o.data = fo.dir;
             o.fullscreen = ConfigFullscreen(fo.cfg, o.w, o.h);
+            Launcher::SyncGbaSettings(fo.cfg, o.data);
             fprintf(stderr, "[launcher] GBA: %s\n", rom.c_str());
             GbaWide::Play(rom, o);
             directGame = -1;

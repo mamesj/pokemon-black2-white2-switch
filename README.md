@@ -4,7 +4,7 @@
 Deck or other handheld PC, an Android phone, an iPhone or iPad, or a modded Nintendo Switch: one screen,
 widescreen, 60 fps, up to 4K on a PC and 720p on the Switch.** No more squinting at two tiny stacked DS screens.
 
-![Pokémon Fulldex: Black 2, White 2, Black, White, SoulSilver, HeartGold and Platinum in widescreen at 60 fps, on a Nintendo Switch, a PC, a Steam Deck, an Android phone and a Mac](docs/screenshots/trailer-2.gif)
+![Pokémon Fulldex: Black 2, White 2, Black, White, SoulSilver, HeartGold and Platinum, and the GBA games Emerald and FireRed, in widescreen at 60 fps on a PC, a Mac, a Steam Deck, an Android phone and a Nintendo Switch; RetroAchievements, cheats, save states and your own colour and background built in](docs/screenshots/trailer-3.gif)
 
 ## Downloads
 
@@ -487,6 +487,14 @@ Please tell us how it runs on yours, with your model (see [Reporting a bug](#rep
 
 ### The GBA games
 
+![Emerald: a wild Rayquaza appears at the top of Sky Pillar and Salamence is sent out, in widescreen](docs/screenshots/gba-emerald-rayquaza-battle.gif)
+
+| | |
+|---|---|
+| ![Emerald: walking across Pacifidlog Town's log bridges, the sea reaching both edges](docs/screenshots/gba-emerald-pacifidlog-walk.gif) | ![Emerald: Sootopolis City, inside the crater](docs/screenshots/gba-emerald-sootopolis.png) |
+| ![FireRed: Charizard's Flamethrower at Mewtwo in Cerulean Cave](docs/screenshots/gba-firered-mewtwo-battle.png) | ![FireRed: Charizard against the Snorlax on Route 16](docs/screenshots/gba-firered-snorlax-battle.png) |
+| ![LeafGreen: Venusaur's Razor Leaf at Articuno in the Seafoam Islands](docs/screenshots/gba-leafgreen-articuno-battle.png) | ![LeafGreen: Lavender Town, with Pokémon Tower at the top](docs/screenshots/gba-leafgreen-lavender.png) |
+
 Pokémon Emerald, FireRed, LeafGreen and Ultra Violet (a FireRed hack) in widescreen at 60 fps,
 from [Pokémon GBA Widescreen](#credits-and-licence), built in (Windows, Linux, Android and the
 Switch; not yet on a Mac, iPhone or iPad).
@@ -495,6 +503,10 @@ Switch; not yet on a Mac, iPhone or iPad).
   (version 1.0 or 1.1), and Ultra Violet as its `.gba` or as its `.ips` patch with a FireRed
   1.0 ROM beside it. A `GBA` folder inside `roms` works too.
 - **Saves:** with the others (`emerald.sav` ...), or in that `GBA` folder's own `saves`.
+- **What you get:** the overworld drawn wider, with the people and Pokémon around you kept in
+  view out to the edges; battles with their backgrounds carried across the whole width; the
+  weather (rain, sandstorm, fog, snow) reaching both sides. The DS games' settings (SMOOTH
+  SCALING, FPS COUNTER, VOLUME, BUTTONS) carry over to them.
 - Other GBA games play too, without widescreen. QUIT GAME in a GBA game's pause menu comes
   back to the game list.
 
@@ -528,7 +540,7 @@ OLED in handheld mode; a PC has room to spare, and draws the same picture up to
 
 ## Reporting a bug
 
-Open a **[bug report](https://github.com/mamesj/pokemon-ds-widescreen/issues/new?template=bug_report.yml)**
+Open a **[bug report](https://github.com/mamesj/pokemon-fulldex/issues/new?template=bug_report.yml)**
 (you need to be signed in to GitHub). The form asks for the game, your ROM's
 version and the **`game.log`** file, which says what the program did:
 

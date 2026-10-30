@@ -268,7 +268,7 @@ Categories=Game;
 DESKTOP
     rm -f "build-pc-dist/$APPIMAGE" "build-pc-dist/$APPIMAGE.zsync"
     (cd build-pc-dist && ARCH=x86_64 APPIMAGE_EXTRACT_AND_RUN=1 "$AIT" --no-appstream \
-        -u "gh-releases-zsync|mamesj|pokemon-ds-widescreen|pc-v1|$APPIMAGE.zsync" AppDir "$APPIMAGE")
+        -u "gh-releases-zsync|mamesj|pokemon-fulldex|pc-v1|$APPIMAGE.zsync" AppDir "$APPIMAGE")
     [ -f "build-pc-dist/$APPIMAGE.zsync" ] || fail "no .zsync was made for the AppImage"
     # (Its contents: the program, SDL2, the tables and notes, the icon and the desktop file.)
     (cd "$AD" && find . -mindepth 1 \( -type d -printf '%P/\n' \) -o -printf '%P\n' |

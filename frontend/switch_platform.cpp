@@ -770,6 +770,7 @@ bool Start(int& argc, char**& argv)
         o.saves = game.folder;
         o.data = dir;
         o.fullscreen = true;
+        Launcher::SyncGbaSettings(SettingsPath(dir), o.data);
         fprintf(stderr, "[switch] GBA: %s, saves in %s\n", game.rom.c_str(), game.folder.c_str());
         GbaWide::Play(game.rom, o);
         if (!g_self.empty() && envHasNextLoad())
