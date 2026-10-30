@@ -45,9 +45,13 @@ public:
         std::string line;
         while (std::getline(f, line))
         {
+            const size_t begin = line.find_first_not_of(" \t\r");
+            if (begin == std::string::npos || line[begin] == '#') continue;
             std::istringstream ss(line);
             std::string addr, kind, module, first, name;
             if (!(ss >> addr >> kind >> module >> first >> name)) continue;
+            if (first != "-" && first != "?" &&
+                (first.size() != 8 || first.find_first_not_of("0123456789abcdefABCDEF") != std::string::npos)) continue;
             Func fn;
             fn.addr = (uint32_t)strtoul(addr.c_str(), nullptr, 16);
             fn.thumb = kind == "t";
