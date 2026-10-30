@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+- **Cheat folders open and close**, start closed and show how many codes are on. CHEAT UI in
+  SETTINGS and the pause menu offers DYNAMIC WIDTH and TEXT SIZE (0.1X to 5X, starting at 1X).
+  Long names fit the window with space at both sides, and holding up or down scrolls after a
+  quarter of a second. The cheat window stays the same size while browsing, and cheats are
+  indented beyond their folder names.
 - **New: iPhone and iPad.** A sideloaded app (`pokemon-ds-wide-ios.ipa`, iOS 14 or newer): the
   same game list and games as on Android, with the ROMs, saves and settings in the Files app
   (On My iPhone > Pokemon DS Widescreen).

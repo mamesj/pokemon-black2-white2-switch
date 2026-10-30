@@ -509,6 +509,12 @@ inline std::vector<Setting> SettingsList()
 #endif
 #endif
     l.push_back({ "show_fps", "FPS COUNTER", onOff, "0", "SHOWS THE FRAMES A SECOND IN A CORNER." });
+    l.push_back({ "cheat_dynamic_width", "DYNAMIC WIDTH", onOff, "1",
+                  "ON: THE CHEAT WINDOW FITS ITS NAMES, LEAVING SPACE AT BOTH SIDES. OFF: THE USUAL MENU WIDTH." });
+    std::vector<std::pair<std::string, std::string>> textSizes;
+    for (int size = 1; size <= 50; size++) textSizes.push_back({ std::to_string(size), Menu::TextSizeName(size) });
+    l.push_back({ "cheat_text_size", "TEXT SIZE", textSizes, "10",
+                  "THE CHEAT LIST TEXT SIZE: 0.1X TO 5X IN 0.1X STEPS. STARTS AT 1X. THE TITLE AND HELP STAY SMALL ENOUGH TO FIT." });
 #ifdef __SWITCH__
     l.push_back({ "start_button", "START BUTTON", { { "menu", "PAUSE MENU" }, { "ds", "DS START" } }, "menu",
                   "PAUSE MENU: + OPENS THE PAUSE MENU WHILE PLAYING. DS START: + IS THE DS START BUTTON (THE GAMES HARDLY USE IT) AND + AND - TOGETHER OPEN THE MENU." });
@@ -602,6 +608,7 @@ inline const std::vector<SettingsGroup>& SettingsGroups()
         { "!group2", "CONTROLS", "" },
         { "!group3", "SHORTCUTS", "" },
         { "!group4", "HELP", "" },
+        { "!group5", "CHEAT UI", "DYNAMIC WIDTH / TEXT SIZE" },
     };
     return g;
 }
@@ -616,6 +623,7 @@ inline int GroupOf(const Setting& s)
     for (const char* k : controls)
         if (!strcmp(s.key, k)) return 2;
     if (!strcmp(s.key, "!keys")) return 2;
+    if (!strcmp(s.key, "cheat_dynamic_width") || !strcmp(s.key, "cheat_text_size")) return 5;
     if (s.key[0] == '!') return 3; // (DESKTOP SHORTCUTS, HOME MENU ICONS)
     return 1;
 }
@@ -680,7 +688,7 @@ struct SettingsPage
             std::string names;
             for (const Setting& s : all)
                 if (GroupOf(s) == g) names += (names.empty() ? "" : " / ") + std::string(s.name);
-            groupText[g] = names + ".";
+            groupText[g] = sg.text[0] ? sg.text : names + ".";
             items.push_back({ sg.key, sg.name, { { "", ">" } }, "", groupText[g].c_str() });
         }
         selected = row;
@@ -729,6 +737,7 @@ struct SettingsPage
                 if (atoi(s.values[i].first.c_str()) <= atoi(v.c_str())) best = (int)i;
             return best;
         }
+        if (!strcmp(s.key, "cheat_text_size")) return std::clamp(atoi(v.c_str()), 1, 50) - 1;
         for (size_t i = 0; i < s.values.size(); i++)
             if (s.values[i].first == s.def) return (int)i;
         return 0;
@@ -757,7 +766,8 @@ struct SettingsPage
         if (s.key[0] == '!') return s.key; // (done by the caller)
         const int n = (int)s.values.size();
         const int i = ValueIndex(s);
-        const int next = i < 0 ? (d > 0 ? 0 : n - 1) : (i + d + n) % n;
+        const int next = !strcmp(s.key, "cheat_text_size") ? std::clamp(i + d, 0, n - 1)
+                       : i < 0 ? (d > 0 ? 0 : n - 1) : (i + d + n) % n;
         const std::string line = std::string(s.key) + "=" + s.values[next].first;
         bool found = false;
         for (std::string& l : lines)

@@ -3,6 +3,7 @@
 // headless screenshots show the same thing.
 #pragma once
 #include <algorithm>
+#include <cmath>
 #include <cstdint>
 #include <cstring>
 #include <string>
@@ -118,6 +119,31 @@ struct Canvas
     }
 
     static int TextWidth(const std::string& s, int scale) { return (int)s.size() * 6 * scale; }
+    static int TextWidth(const std::string& s, double scale) { return (int)std::ceil(s.size() * 6 * scale); }
+
+    static std::string FitText(const std::string& s, int width, double scale)
+    {
+        const size_t chars = (size_t)std::max(0, (int)std::floor(width / (6 * scale)));
+        if (s.size() <= chars) return s;
+        return chars ? s.substr(0, chars - 1) + "." : "";
+    }
+
+    // Fractional sizing uses the same glyphs, with each edge rounded to an output pixel.
+    // This keeps the existing font while allowing the cheat menu's 0.1X steps.
+    void Text(int x, int y, const std::string& s, double scale, uint32_t argb)
+    {
+        for (size_t i = 0; i < s.size(); i++)
+            if (const uint8_t* g = Glyph(s[i]))
+                for (int row = 0; row < 7; row++)
+                    for (int col = 0; col < 5; col++)
+                        if (g[row] & (0x10 >> col))
+                        {
+                            const int x0 = (int)std::round((i * 6 + col) * scale);
+                            const int y0 = (int)std::round(row * scale);
+                            Fill(x + x0, y + y0, (int)std::round((i * 6 + col + 1) * scale) - x0,
+                                 (int)std::round((row + 1) * scale) - y0, argb);
+                        }
+    }
 
     void Text(int x, int y, const std::string& s, int scale, uint32_t argb)
     {
@@ -139,10 +165,42 @@ struct MenuInput
     bool up = false, down = false, left = false, right = false, accept = false, back = false;
 };
 
+// One press straight away, then a repeat after a quarter of a second and every 60 ms.
+struct MenuRepeat
+{
+    int held = 0;
+    uint32_t next = 0;
+
+    bool Update(int direction, uint32_t now)
+    {
+        if (!direction) { held = 0; return false; }
+        if (direction != held) { held = direction; next = now + 250; return true; }
+        if ((int32_t)(now - next) < 0) return false;
+        next = now + 60;
+        return true;
+    }
+};
+
+struct MenuStyle
+{
+    int textTenths = 10;
+    bool fitWidth = false;
+    bool margins = false;
+};
+
 struct MenuItem
 {
     std::string label;
-    std::string value; // shown right-aligned; empty for plain actions
+    std::string value; // shown right-aligned; empty hides the value
+    bool directional = false; // folders can open/close with left/right even without a count
+};
+
+// The complete contents used to size a page, including rows in closed folders. Values use
+// their widest form so that toggles, counts and navigation do not move the window.
+struct MenuLayout
+{
+    std::vector<MenuItem> items;
+    std::string hint;
 };
 
 struct Menu
@@ -150,6 +208,11 @@ struct Menu
     bool open = false;
     int selected = 0;
     std::vector<MenuItem> items;
+
+    static std::string TextSizeName(int tenths)
+    {
+        return std::to_string(tenths / 10) + (tenths % 10 ? "." + std::to_string(tenths % 10) : "") + "X";
+    }
 
     // Returns the index of an item that was activated this frame, or -1.
     // dir is -1/+1 when left/right was used on it, 0 for accept.
@@ -161,12 +224,12 @@ struct Menu
         if (in.up) selected = (selected + n - 1) % n;
         if (in.down) selected = (selected + 1) % n;
         if (in.accept) return selected;
-        if (in.left && !items[selected].value.empty())
+        if (in.left && (!items[selected].value.empty() || items[selected].directional))
         {
             dir = -1;
             return selected;
         }
-        if (in.right && !items[selected].value.empty())
+        if (in.right && (!items[selected].value.empty() || items[selected].directional))
         {
             dir = 1;
             return selected;
@@ -177,7 +240,7 @@ struct Menu
     // Where the box and its rows were last drawn (Draw), in the canvas's pixels, and the first
     // row shown (a list longer than the screen scrolls with the chosen row: CHEATS).
     mutable int drawnX = 0, drawnY = 0, drawnW = 0, drawnH = 0, drawnLineH = 0, drawnFirstY = 0;
-    mutable int scroll = 0;
+    mutable int scroll = 0, drawnShown = 0;
 
     // The row at (x, y) of the canvas the menu was drawn on (touch screens): its index, -1 for
     // a point in the box but on no row, -2 for a point outside the box.
@@ -185,90 +248,124 @@ struct Menu
     {
         if (drawnW <= 0 || x < drawnX || x >= drawnX + drawnW || y < drawnY || y >= drawnY + drawnH) return -2;
         if (drawnLineH <= 0 || y < drawnFirstY) return -1;
-        const int i = scroll + (y - drawnFirstY) / drawnLineH;
-        return i < (int)items.size() ? i : -1;
+        const int row = (y - drawnFirstY) / drawnLineH;
+        return row < drawnShown ? scroll + row : -1;
     }
 
     // note: a few lines of text in a strip under the box (CHEATS: what the database says about
-    // the chosen cheat), wrapped to the box's width.
-    void Draw(Canvas& c, const std::string& title, const std::string& hint, const std::string& note = "") const
+    // the chosen cheat), wrapped to the box's width. A complete layout reserves the same
+    // rows and four lines of notes for every selection, including when its note is empty.
+    void Draw(Canvas& c, const std::string& title, const std::string& hint, const std::string& note = "",
+              const MenuStyle& style = {}, const MenuLayout* layout = nullptr) const
     {
-        int scale = c.h / 240;
-        if (scale < 1) scale = 1;
-        int lineH = 11 * scale;
-        // (Rows closer together if they would not all fit on the screen, down to 9 * scale.)
-        // With no title the box starts with the first item.
+        const auto& sizingItems = layout ? layout->items : items;
+        const auto& sizingHint = layout ? layout->hint : hint;
+        const int baseScale = std::max(1, c.h / 240);
+        const double textScale = baseScale * std::clamp(style.textTenths, 1, 50) / 10.0;
+        // Keep the title, instructions and notes usable even with very large list text.
+        const double detailScale = std::min((double)baseScale, textScale);
+        const int scale = std::max(1, (int)std::ceil(detailScale));
+        int lineH = std::max(1, (int)std::round(11 * textScale));
+        const int detailLineH = std::max(1, (int)std::round(11 * detailScale));
         const bool hasTitle = !title.empty();
-        // (As many rows as fit at the smallest spacing; the rest scroll into view.)
-        const int fit = std::max(1, (c.h - 4 - 6 * scale) / (9 * scale) - (hasTitle ? 3 : 2));
-        const int shown = std::min((int)items.size(), fit);
+        const int marginX = style.margins ? std::max(8, c.w / 20) : 4;
+        const int marginY = style.margins ? std::max(4, c.h / 20) : 2;
+        int boxW = 190 * baseScale;
+        if (style.fitWidth)
+        {
+            boxW = std::max(Canvas::TextWidth(title, detailScale), Canvas::TextWidth(sizingHint, detailScale)) + 12 * scale;
+            for (const auto& item : sizingItems)
+            {
+                const int valueW = item.value.empty() ? 0 : Canvas::TextWidth("< " + item.value + " >", textScale) + 8 * scale;
+                boxW = std::max(boxW, Canvas::TextWidth(item.label, textScale) + valueW + 12 * scale);
+            }
+        }
+        boxW = std::max(1, std::min(boxW, c.w - 2 * marginX - 2 * scale));
+        // Wrap the full selected name and note within the space reserved for this page.
+        std::vector<std::string> noteLines;
+        const int noteChars = std::max(1, (int)((boxW - 12 * scale) / (6 * detailScale)));
+        if (!note.empty())
+        {
+            size_t pos = 0;
+            while (pos < note.size() && noteLines.size() < 4)
+            {
+                size_t end = std::min(note.size(), pos + noteChars);
+                if (end < note.size())
+                {
+                    const size_t space = note.rfind(' ', end);
+                    if (space != std::string::npos && space > pos) end = space;
+                }
+                noteLines.push_back(note.substr(pos, end - pos));
+                pos = note.find_first_not_of(' ', end);
+            }
+            if (pos < note.size()) noteLines.back() = noteLines.back().substr(0, std::max(0, noteChars - 3)) + "...";
+        }
+        const int noteLineH = std::max(1, (int)std::round(9 * detailScale));
+        const int fixedH = (hasTitle ? detailLineH : 0) + 2 * detailLineH + 6 * scale;
+        const int available = c.h - 2 * marginY - 2 * scale;
+        int noteRows = layout ? 4 : (int)noteLines.size();
+        while (noteRows && fixedH + lineH + noteRows * noteLineH + 9 * scale > available)
+            noteRows--;
+        if ((int)noteLines.size() > noteRows) noteLines.resize(noteRows);
+        const int noteH = noteRows ? noteRows * noteLineH + 6 * scale : 0;
+        const int maxBoxH = available - noteH - (noteH ? 3 * scale : 0);
+        const int minLineH = std::max(1, (int)std::round(9 * textScale));
+        const int fit = std::max(1, (maxBoxH - fixedH) / minLineH);
+        const int slots = std::min((int)sizingItems.size(), fit);
+        const int shown = std::min((int)items.size(), slots);
+        if (slots) lineH = std::max(minLineH, std::min(lineH, (maxBoxH - fixedH) / slots));
         if (selected < scroll) scroll = selected;
         if (selected >= scroll + shown) scroll = selected - shown + 1;
         scroll = std::max(0, std::min(scroll, (int)items.size() - shown));
-        const int rows = shown + (hasTitle ? 3 : 2);
-        if (lineH * rows + 6 * scale > c.h - 4) lineH = std::max(9 * scale, (c.h - 4 - 6 * scale) / rows);
-        int boxW = 190 * scale;
-        if (boxW > c.w - 8) boxW = c.w - 8;
-        int boxH = lineH * rows + 6 * scale;
-        // The note's lines (up to 4, the last cut short), and the box moved up to make room.
-        std::vector<std::string> noteLines;
-        if (!note.empty())
-        {
-            std::string line, word;
-            const int maxW = boxW - 12 * scale;
-            auto push = [&](const std::string& w) {
-                const std::string t = line.empty() ? w : line + " " + w;
-                if (!line.empty() && Canvas::TextWidth(t, scale) > maxW) { noteLines.push_back(line); line = w; }
-                else line = t;
-            };
-            for (char ch : note + " ")
-            {
-                if (ch == ' ') { if (!word.empty()) push(word); word.clear(); }
-                else word += ch;
-            }
-            if (!line.empty()) noteLines.push_back(line);
-            if (noteLines.size() > 4) { noteLines.resize(4); noteLines[3] += "..."; }
-        }
-        const int noteH = noteLines.empty() ? 0 : (int)noteLines.size() * 9 * scale + 6 * scale;
-        int bx = (c.w - boxW) / 2, by = std::max(2, (c.h - boxH - noteH) / 2);
+        const int boxH = slots * lineH + fixedH;
+        int bx = (c.w - boxW) / 2, by = std::max(marginY + scale, (c.h - boxH - noteH - (noteH ? 3 * scale : 0)) / 2);
         // (Kept for ItemAt: where the rows were drawn.)
         drawnX = bx;
         drawnY = by;
         drawnW = boxW;
         drawnH = boxH;
         drawnLineH = lineH;
-        drawnFirstY = by + (hasTitle ? lineH : 0) + 5 * scale - 2 * scale;
+        drawnShown = shown;
+        drawnFirstY = by + (hasTitle ? detailLineH : 0) + 3 * scale;
 
         c.Fill(0, 0, c.w, c.h, 0xA0000000);
         c.Fill(bx - scale, by - scale, boxW + 2 * scale, boxH + 2 * scale, 0xFFE8E8E8);
         c.Fill(bx, by, boxW, boxH, 0xFF1C2A44);
-        if (hasTitle) c.Text(bx + (boxW - Canvas::TextWidth(title, scale)) / 2, by + 3 * scale, title, scale, 0xFFFFD75E);
+        const std::string heading = Canvas::FitText(title, boxW - 12 * scale, detailScale);
+        if (hasTitle) c.Text(bx + (boxW - Canvas::TextWidth(heading, detailScale)) / 2, by + 3 * scale, heading, detailScale, 0xFFFFD75E);
 
-        int y = by + (hasTitle ? lineH : 0) + 5 * scale;
+        int y = drawnFirstY;
         // (Marks at the box's right edge where rows are scrolled out of view, above or below.)
         if (scroll > 0) c.Text(bx + boxW - 8 * scale, y - lineH + 2 * scale, "+", scale, 0xFF8FA0C0);
         if (scroll + shown < (int)items.size()) c.Text(bx + boxW - 8 * scale, y + shown * lineH - 2 * scale, "+", scale, 0xFF8FA0C0);
         for (int i = scroll; i < scroll + shown; i++)
         {
             bool sel = i == selected;
-            if (sel) c.Fill(bx + 2 * scale, y - 2 * scale, boxW - 4 * scale, lineH, 0xFF3D6FD1);
+            if (sel) c.Fill(bx + 2 * scale, y, boxW - 4 * scale, lineH, 0xFF3D6FD1);
             uint32_t col = sel ? 0xFFFFFFFF : 0xFFC8D0E0;
-            c.Text(bx + 6 * scale, y, items[i].label, scale, col);
+            const std::string v = items[i].value.empty() ? "" : "< " + items[i].value + " >";
+            const int valueW = Canvas::TextWidth(v, textScale);
+            const int labelW = boxW - 12 * scale - (v.empty() ? 0 : valueW + 8 * scale);
+            const int textY = y + std::max(0, (lineH - (int)std::ceil(7 * textScale)) / 2);
+            c.Text(bx + 6 * scale, textY, Canvas::FitText(items[i].label, labelW, textScale), textScale, col);
             if (!items[i].value.empty())
             {
-                std::string v = "< " + items[i].value + " >";
-                c.Text(bx + boxW - 6 * scale - Canvas::TextWidth(v, scale), y, v, scale, col);
+                const std::string value = Canvas::FitText(v, boxW - 12 * scale, textScale);
+                c.Text(bx + boxW - 6 * scale - Canvas::TextWidth(value, textScale), textY, value, textScale, col);
             }
             y += lineH;
         }
-        c.Text(bx + (boxW - Canvas::TextWidth(hint, scale)) / 2, y + 4 * scale, hint, scale, 0xFF8FA0C0);
-        if (!noteLines.empty())
+        const std::string footer = Canvas::FitText(hint, boxW - 12 * scale, detailScale);
+        const int footerY = drawnFirstY + slots * lineH + 4 * scale;
+        c.Text(bx + (boxW - Canvas::TextWidth(footer, detailScale)) / 2, footerY, footer, detailScale, 0xFF8FA0C0);
+        if (noteH)
         {
             const int ny = by + boxH + 3 * scale;
             c.Fill(bx - scale, ny - scale, boxW + 2 * scale, noteH + 2 * scale, 0xFFE8E8E8);
             c.Fill(bx, ny, boxW, noteH, 0xFF142034);
             for (size_t i = 0; i < noteLines.size(); i++)
-                c.Text(bx + 6 * scale, ny + 4 * scale + (int)i * 9 * scale, noteLines[i], scale, 0xFFC8D0E0);
+                c.Text(bx + 6 * scale, ny + 4 * scale + (int)i * noteLineH,
+                       Canvas::FitText(noteLines[i], boxW - 12 * scale, detailScale), detailScale, 0xFFC8D0E0);
         }
     }
 };

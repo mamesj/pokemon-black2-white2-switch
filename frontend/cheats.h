@@ -31,12 +31,25 @@ namespace Cheats
 
 struct Cheat
 {
-    std::string name;  // as shown: its folder and its own name, in the menus' font
+    std::string name;  // its own full name, in the menus' font
     std::string key;   // as kept in <code>-on.txt: where it came from and its full name
     std::vector<melonDS::u32> code;
     bool on = false;
     int group = -1;    // a folder of the database in which only one may be on (-1: none)
+    int folder = -1;   // a collapsible folder in the menu (-1: at the root)
     std::string note;  // what the database says about it ("hold L+R", ...), in the menus' font
+};
+
+struct Folder
+{
+    std::string name, note;
+    bool expanded = false;
+};
+
+struct Row
+{
+    int index;
+    bool folder;
 };
 
 // A name in the menus' font: capitals, digits and : - + . / < > ! ( ), others as spaces, cut to
@@ -66,6 +79,7 @@ inline std::string Shown(const std::string& s, size_t max)
 struct List
 {
     std::vector<Cheat> items;
+    std::vector<Folder> folders;
     std::string folder, code;
     std::vector<std::string> sources; // what was read, for game.log
 
@@ -90,24 +104,67 @@ struct List
     }
 
     void Add(const std::string& name, const std::string& key, const std::vector<melonDS::u32>& code, int group = -1,
-             const std::string& note = "")
+             const std::string& note = "", int parent = -1)
     {
         if (code.empty()) return;
         Cheat c;
-        c.name = Shown(name, 21); // (beside its ON / OFF in the pause menu's box)
+        // Keep the name intact: the menu fits it to the current window and text size.
+        c.name = Shown(name, name.size() + 1);
         c.key = key;
         c.code = code;
         c.group = group;
-        // (Shown under the menu, a few lines at most; the whole name first when the menu's is cut.)
-        if (!note.empty() && Shown(note, 160) != "?") c.note = Shown(note, 160);
-        const std::string full = Shown(name, 80);
-        if (full != c.name) c.note = c.note.empty() ? full : full + ": " + c.note;
+        c.folder = parent;
+        c.note = c.name;
+        if (!note.empty() && Shown(note, note.size() + 1) != "?") c.note += ": " + Shown(note, note.size() + 1);
         items.push_back(c);
+    }
+
+    void AddCategory(const melonDS::ARCodeCat& cat, bool database)
+    {
+        const int parent = (int)folders.size();
+        const std::string name = Shown(cat.Name, cat.Name.size() + 1);
+        std::string note = name;
+        if (!cat.Description.empty()) note += ": " + Shown(cat.Description, cat.Description.size() + 1);
+        if (cat.OnlyOneCodeEnabled) note += ". ONE CHEAT AT A TIME";
+        folders.push_back({ name, note });
+        const size_t first = items.size();
+        for (const auto& sub : cat.Children)
+            if (std::holds_alternative<melonDS::ARCode>(sub))
+            {
+                const auto& c = std::get<melonDS::ARCode>(sub);
+                // Keep the existing saved keys, including the database folder's original name.
+                Add(c.Name, database ? "dat:" + cat.Name + "/" + c.Name : "mch:" + c.Name,
+                    c.Code, cat.OnlyOneCodeEnabled ? parent : -1,
+                    c.Description.empty() ? cat.Description : c.Description, parent);
+            }
+        if (items.size() == first) folders.pop_back();
+    }
+
+    std::vector<Row> Rows(bool includeClosed = false) const
+    {
+        std::vector<Row> rows;
+        for (size_t i = 0; i < items.size(); i++)
+        {
+            const int parent = items[i].folder;
+            if (parent >= 0 && (i == 0 || items[i - 1].folder != parent)) rows.push_back({ parent, true });
+            if (parent < 0 || includeClosed || folders[parent].expanded) rows.push_back({ (int)i, false });
+        }
+        return rows;
+    }
+
+    std::string Label(const Row& row) const
+    {
+        if (row.folder)
+            return std::string(folders[row.index].expanded ? "- " : "+ ") + folders[row.index].name;
+        const auto& c = items[row.index];
+        // Start children beyond both the folder marker and its name's left edge.
+        return std::string(c.folder < 0 ? "" : "    ") + c.name;
     }
 
     void Load(const std::string& cheatFolder, const std::string& gameCode, const unsigned char* romHeader)
     {
         items.clear();
+        folders.clear();
         sources.clear();
         folder = cheatFolder;
         code = gameCode;
@@ -146,8 +203,13 @@ struct List
             melonDS::ARCodeFile file(mch);
             if (!file.Error)
             {
-                for (const melonDS::ARCode& c : file.GetCodes())
-                    Add((c.Parent && !c.Parent->Name.empty() ? c.Parent->Name + ": " : "") + c.Name, "mch:" + c.Name, c.Code, -1, c.Description);
+                for (const auto& item : file.RootCat.Children)
+                    if (std::holds_alternative<melonDS::ARCodeCat>(item)) AddCategory(std::get<melonDS::ARCodeCat>(item), false);
+                    else
+                    {
+                        const auto& c = std::get<melonDS::ARCode>(item);
+                        Add(c.Name, "mch:" + c.Name, c.Code, -1, c.Description);
+                    }
                 sources.push_back(mch);
             }
         }
@@ -167,7 +229,6 @@ struct List
                     if (e.Checksum == sum) pick = &e;
                 if (pick)
                 {
-                    int groups = 0;
                     for (const auto& item : pick->RootCat.Children)
                     {
                         if (std::holds_alternative<melonDS::ARCode>(item))
@@ -175,17 +236,7 @@ struct List
                             const auto& c = std::get<melonDS::ARCode>(item);
                             Add(c.Name, "dat:" + c.Name, c.Code, -1, c.Description);
                         }
-                        else
-                        {
-                            const auto& cat = std::get<melonDS::ARCodeCat>(item);
-                            const int g = cat.OnlyOneCodeEnabled ? groups++ : -1;
-                            for (const auto& sub : cat.Children)
-                                if (std::holds_alternative<melonDS::ARCode>(sub))
-                                {
-                                    const auto& c = std::get<melonDS::ARCode>(sub);
-                                    Add(cat.Name + ": " + c.Name, "dat:" + cat.Name + "/" + c.Name, c.Code, g, c.Description.empty() ? cat.Description : c.Description);
-                                }
-                        }
+                        else AddCategory(std::get<melonDS::ARCodeCat>(item), true);
                     }
                     sources.push_back(dat + " (" + pick->Name + ")");
                 }
@@ -230,11 +281,22 @@ struct List
         }
     }
 
-    int On() const
+    int On(int parent = -1) const
     {
         int n = 0;
-        for (const Cheat& c : items) n += c.on;
+        for (const Cheat& c : items) n += c.on && (parent < 0 || c.folder == parent);
         return n;
+    }
+
+    int Count(int parent) const
+    {
+        return (int)std::count_if(items.begin(), items.end(), [&](const Cheat& c) { return c.folder == parent; });
+    }
+
+    std::string FolderValue(int parent) const
+    {
+        const int n = On(parent);
+        return n ? std::to_string(n) : "";
     }
 
     // The ones that are on, to melonDS's engine.
