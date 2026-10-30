@@ -24,6 +24,10 @@
 #undef STB_IMAGE_IMPLEMENTATION
 #include "launcher.h"
 #include "controls.h"
+#ifdef SSR_GBA
+#include <map>
+#include "gba_games.h" // Pokemon GBA Widescreen, built in: its GBA games (CMakeLists.txt, SSR_GBA_DIR)
+#endif
 #ifdef SSR_ALL_GAMES
 #define STB_IMAGE_WRITE_IMPLEMENTATION
 #define STBI_WRITE_NO_STDIO
@@ -78,6 +82,7 @@ bool RomfsReady()
 // build's).
 bool Playable(const Launcher::Game& g)
 {
+    if (g.platform == Launcher::GBA) return true; // (any GBA game plays, with widescreen or without)
     if (!g.known) return false;
     if (g.code == "IPGE" || g.code == "IPKE" || g.code == "IPGF" || g.code == "IPKF") return rc_num_chunks > 0;
     struct stat st;
@@ -132,7 +137,7 @@ std::string InstallHomeIcons(const std::vector<Launcher::Game>& games)
         done.push_back(g.code);
         SwitchForwarder::Entry e;
         const Launcher::KnownGame* k = Launcher::Known(g.code);
-        e.name = k ? k->name : g.name;
+        e.name = k ? k->name : Launcher::TitleCase(g.name);
         e.args = "--game " + g.code;
         // The icon: the player's own picture in icons/ if there is one, else the box art built
         // into the program, else the list's picture (a one-game program's icon can be a placeholder).
@@ -197,7 +202,18 @@ int PickGame(const std::vector<Launcher::Game>& games, int selected, const std::
     padInitializeDefault(&pad);
     Canvas canvas;
     canvas.Resize(1280, 720);
-    int first = 0, held = 0, result = -1, cols = 3;
+    // The touch screen (handheld): SETTINGS at the right of the title band, BACK at its left in
+    // the settings, as on a PC or a phone (pc_launcher.cpp). A tap counts as the finger lifts.
+    hidInitializeTouchScreen();
+    bool touching = false;
+    int touchX = 0, touchY = 0;
+    // SETTINGS or the tabs chosen with the D-pad: up from the first row of games the tabs (left
+    // and right change the tab), up again SETTINGS.
+    bool onSettings = false, onTabs = false;
+    // The tab shown (ALL first, the list opens on it), how far down it is scrolled; selected: a
+    // game in that tab, or -1 when it has none (Launcher::MakeView, Step).
+    int tab = 0, scroll = 0, held = 0, result = -1;
+    auto view = [&]() { return Launcher::MakeView(canvas, games, tab); };
     bool guide = false; // the settings page (Launcher::SettingsPage)
     Launcher::SettingsPage page;
     // The buttons changed in KEYS AND BUTTONS (controls.h): the list follows them (A plays, Y the
@@ -229,8 +245,15 @@ int PickGame(const std::vector<Launcher::Game>& games, int selected, const std::
 #ifdef SSR_ALL_GAMES
     bool installIcons = false; // (HOME MENU ICONS chosen: done after INSTALLING is on the screen)
 #endif
+    // The list's look (GAME LIST on the settings page: COLOUR, and BACKGROUND, a picture in this
+    // folder), read again when one of them changes.
+    const std::string listDir = cfgPath.substr(0, cfgPath.find_last_of('/'));
+    Launcher::Theme theme;
+    Launcher::Background background;
+    Launcher::LoadLook(cfgPath, listDir, theme, background);
     auto change = [&](int d) {
         const char* key = page.Change(d);
+        if (key && !strncmp(key, "list_", 5)) Launcher::LoadLook(cfgPath, listDir, theme, background);
         if (key && !strcmp(key, "!keys"))
         {
             ctl.Load(cfgPath);
@@ -268,6 +291,25 @@ int PickGame(const std::vector<Launcher::Game>& games, int selected, const std::
         }
         padUpdate(&pad);
         const u64 down = padGetButtonsDown(&pad), now = padGetButtons(&pad);
+        int tapX = -1, tapY = -1;
+        {
+            HidTouchScreenState ts = {};
+            if (hidGetTouchScreenStates(&ts, 1) && ts.count > 0)
+            {
+                touching = true;
+                touchX = (int)ts.touches[0].x;
+                touchY = (int)ts.touches[0].y;
+            }
+            else if (touching)
+            {
+                touching = false;
+                tapX = touchX;
+                tapY = touchY;
+            }
+        }
+        const int bandH = 22 * std::max(1, canvas.h / 240);
+        const bool tapSettings = tapY >= 0 && tapY < bandH && tapX > canvas.w * 3 / 4;
+        const bool tapBack = tapY >= 0 && tapY < bandH && tapX < canvas.w / 4;
         // The arrows (or a stick) move through the grid, and keep moving while held.
         const bool up = now & HidNpadButton_AnyUp, dn = now & HidNpadButton_AnyDown;
         const bool lf = now & HidNpadButton_AnyLeft, rt = now & HidNpadButton_AnyRight;
@@ -323,44 +365,103 @@ int PickGame(const std::vector<Launcher::Game>& games, int selected, const std::
             if (step && (lf || rt)) change(lf ? -1 : 1);
             if (down & HidNpadButton_A) change(1);
             // (B: from a group back to the groups first; Y closes the page.)
-            if ((down & HidNpadButton_B) && !page.Back()) guide = false;
+            if (((down & HidNpadButton_B) || tapBack) && !page.Back()) guide = false;
             if (down & HidNpadButton_Y) guide = false;
             if (down & HidNpadButton_Plus) break;
         }
-        else if (down & (ctl.PadCustom() ? action(Controls::Y) : (u64)HidNpadButton_Y))
+        else if ((down & (ctl.PadCustom() ? action(Controls::Y) : (u64)HidNpadButton_Y)) || tapSettings ||
+                 (onSettings && (down & (ctl.PadCustom() ? action(Controls::A) : (u64)HidNpadButton_A))))
         {
             guide = true;
+            onSettings = false;
             page.Open(cfgPath);
             held = 0;
         }
         else
         {
-            const bool step = held == 1 || (held > 20 && held % 6 == 0);
-            int to = selected;
-            if (step && lf) to = selected - 1;
-            if (step && rt) to = selected + 1;
-            if (step && up) to = selected - cols;
-            if (step && dn) to = std::min(selected + cols, (int)games.size() - 1);
-            if (to != selected && to >= 0 && to < (int)games.size())
-            {
-                selected = to;
+            // L and R (or the buttons CONTROLS gave them): the tabs, keeping the chosen game if
+            // it is in the new one.
+            const u64 tl = ctl.PadCustom() ? action(Controls::L) : (u64)HidNpadButton_L;
+            const u64 tr = ctl.PadCustom() ? action(Controls::R) : (u64)HidNpadButton_R;
+            auto setTab = [&](int by) {
+                tab = (tab + by + Launcher::TABS) % Launcher::TABS;
+                scroll = 0;
+                const Launcher::View v = view();
+                if (v.SpotOf(selected) < 0) selected = Launcher::FirstIn(v);
+                if (Launcher::FirstIn(v) < 0) onTabs = true; // (no games: left and right go on)
                 note.clear();
+            };
+            if (down & (tl | tr)) setTab((down & tr) ? 1 : -1);
+            const bool step = held == 1 || (held > 20 && held % 6 == 0);
+            const int dir = !step ? 0 : lf ? 1 : rt ? 2 : up ? 3 : dn ? 4 : 0;
+            const bool aDown = (down & (ctl.PadCustom() ? action(Controls::A) : (u64)HidNpadButton_A)) != 0;
+            const bool wasNav = onSettings || onTabs; // (A there is not a game's: it is not played as well)
+            if (onSettings)
+            {
+                // (Down from SETTINGS: the tabs.)
+                if (dir == 4)
+                {
+                    onSettings = false;
+                    onTabs = true;
+                }
             }
-            if (down & (ctl.PadCustom() ? action(Controls::A) : (u64)HidNpadButton_A))
+            else if (onTabs)
+            {
+                // Left and right: the tabs; down (or A): into the tab's games; up: SETTINGS.
+                if (dir == 1 || dir == 2) setTab(dir == 2 ? 1 : -1);
+                else if (dir == 3)
+                {
+                    onTabs = false;
+                    onSettings = true;
+                }
+                else if ((dir == 4 || aDown) && Launcher::FirstIn(view()) >= 0)
+                {
+                    onTabs = false;
+                    if (view().SpotOf(selected) < 0) selected = Launcher::FirstIn(view());
+                }
+            }
+            else if (dir)
+            {
+                const int to = Launcher::Step(view(), selected, dir);
+                if (to < 0 && dir == 3) onTabs = true; // (up from the first row)
+                else if (to >= 0 && to != selected)
+                {
+                    selected = to;
+                    note.clear();
+                }
+            }
+            if (!wasNav && !onSettings && !onTabs && selected >= 0 && (down & (ctl.PadCustom() ? action(Controls::A) : (u64)HidNpadButton_A)))
             {
                 if (Playable(games[selected]))
                 {
                     result = selected;
                     break;
                 }
-                note = games[selected].known ? "THIS DOWNLOAD DOES NOT HAVE THIS GAME" : "THIS GAME IS NOT ONE THAT THIS PLAYS";
+                note = games[selected].comingSoon ? games[selected].name + ": COMING SOON"
+                     : games[selected].known ? "THIS DOWNLOAD DOES NOT HAVE THIS GAME" : "THIS GAME IS NOT ONE THAT THIS PLAYS";
             }
             if (down & (HidNpadButton_Plus | (ctl.PadCustom() ? action(Controls::B) : (u64)HidNpadButton_B))) break;
         }
-        if (guide) page.Draw(canvas, page.group < 0 ? "UP / DOWN: CHOOSE    A: OPEN    B: BACK"
-                                                    : "UP / DOWN: CHOOSE    LEFT / RIGHT / A: CHANGE    B: BACK");
-        if (guide && keysOpen) keysMenu.Draw(canvas, "KEYS AND BUTTONS", keysCapture >= 0 ? "OR WAIT 5 SECONDS: AS IT WAS" : "A: CHANGE   B: BACK");
-        else cols = Launcher::Draw(canvas, games, selected, first, note);
+        // (The game list only when the settings page is not open: drawn over it, the page was
+        // hidden while it took the buttons, and the list seemed frozen.)
+        if (guide)
+        {
+            page.Draw(canvas, page.group < 0 ? "UP / DOWN: CHOOSE    A: OPEN    B: BACK"
+                                             : "UP / DOWN: CHOOSE    LEFT / RIGHT / A: CHANGE    B: BACK", theme);
+            if (keysOpen) keysMenu.Draw(canvas, "KEYS AND BUTTONS", keysCapture >= 0 ? "OR WAIT 5 SECONDS: AS IT WAS" : "A: CHANGE   B: BACK");
+        }
+        else Launcher::Draw(canvas, games, tab, onSettings || onTabs ? -1 : selected, scroll, note, std::string(), theme, true, onTabs);
+        {
+            // The title band's buttons, as pc_launcher.cpp draws them (the chosen one framed).
+            const int s = std::max(1, canvas.h / 240);
+            const Launcher::Theme& th = theme;
+            auto button = [&](int x, const char* text, bool on) {
+                if (on) canvas.Fill(x - 3 * s, 4 * s, Canvas::TextWidth(text, s) + 5 * s, 13 * s, th.frame);
+                canvas.Text(x, 7 * s, text, s, on ? th.title : th.hint);
+            };
+            if (guide && !keysOpen) button(8 * s, "< BACK", false);
+            else if (!guide) button(canvas.w - 8 * s - Canvas::TextWidth("SETTINGS", s), "SETTINGS", onSettings);
+        }
         u32 stride;
         u32* out = (u32*)framebufferBegin(&fb, &stride);
         for (int y = 0; y < 720; y++)
@@ -410,12 +511,34 @@ std::vector<Launcher::Game> FindGames(const std::string& dir, bool& ownFolder)
         }
         ownFolder = own > 0;
     }
+#ifdef SSR_GBA
+    // The GBA games: in this folder's roms (their saves beside the DS games') and a GBA folder in
+    // it (with that folder's saves), and in Pokemon GBA Widescreen's own folder if it is on the
+    // card too (with its saves, so they carry on).
+    {
+        std::map<std::string, std::vector<uint32_t>> art;
+        const size_t before = games.size();
+        GbaGames::AddWithGbaFolder(dir + "/roms", dir, games, art);
+        const std::string gbaApp = "sdmc:/switch/pokemon-gba-wide";
+        struct stat st;
+        if (dir != gbaApp && stat((gbaApp + "/roms").c_str(), &st) == 0)
+        {
+            const size_t mine = games.size();
+            GbaGames::Add(gbaApp + "/roms", gbaApp + "/saves", games, art);
+            for (size_t i = mine; i < games.size(); i++)
+                for (size_t j = before; j < mine; j++)
+                    if (games[j].code == games[i].code) games[i].where = "IN GBA-WIDE";
+        }
+        ownFolder |= games.size() > before;
+    }
 #endif
+#endif
+    Launcher::AddComingSoon(games);
     Launcher::Sort(games);
     // The same game in two folders (two ROMs, two saves): each says where it is.
     for (size_t i = 0; i < games.size(); i++)
         for (size_t j = 0; j < games.size(); j++)
-            if (i != j && games[i].code == games[j].code && games[i].folder != dir)
+            if (i != j && games[i].platform == Launcher::DS && games[i].code == games[j].code && games[i].folder != dir)
             {
                 // (pokemon-black2-wide: IN BLACK2)
                 std::string name = games[i].folder.substr(games[i].folder.find_last_of('/') + 1);
@@ -633,6 +756,28 @@ bool Start(int& argc, char**& argv)
             }
             g_canChange = true;
         }
+    }
+#endif
+#ifdef SSR_GBA
+    // A GBA game (chosen in the list, which started the program again for it, or from its HOME
+    // Menu icon): played here, Pokemon GBA Widescreen built in; then the program starts again for
+    // the list, as QUIT does for a DS game.
+    if (games[chosen].platform == Launcher::GBA)
+    {
+        const Launcher::Game& game = games[chosen];
+        GbaWide::Options o;
+        o.roms = game.rom.substr(0, game.rom.find_last_of('/'));
+        o.saves = game.folder;
+        o.data = dir;
+        o.fullscreen = true;
+        fprintf(stderr, "[switch] GBA: %s, saves in %s\n", game.rom.c_str(), game.folder.c_str());
+        GbaWide::Play(game.rom, o);
+        if (!g_self.empty() && envHasNextLoad())
+        {
+            const std::string cmd = g_self.find(' ') == std::string::npos ? g_self : "\"" + g_self + "\"";
+            envSetNextLoad(g_self.c_str(), cmd.c_str());
+        }
+        return false;
     }
 #endif
     const Launcher::Game& game = games[chosen];

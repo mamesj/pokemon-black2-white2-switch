@@ -1,0 +1,2 @@
+rcheevos v12.5.0 (https://github.com/RetroAchievements/rcheevos, commit 1433173), MIT licence: LICENSE.
+Only include/ and src/ (without the RAIntegration and libretro parts).

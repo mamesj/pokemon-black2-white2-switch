@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Builds the Mac all-games app, Pokemon DS Widescreen.app (the same program as the PC download,
+# Builds the Mac all-games app, Pokemon Fulldex.app (the same program as the PC download,
 # frontend/pc_launcher.cpp), on a Mac, for its own processor (Apple silicon or Intel), zipped as
 # build-mac-dist/pokemon-ds-wide-pc-macos-<arm64|x86_64>.zip.
 #
@@ -75,7 +75,7 @@ ninja -C build-mac ssrecomp
 
 say "The app"
 DIST="$HERE/build-mac-dist"
-APP="$DIST/Pokemon DS Widescreen.app"
+APP="$DIST/Pokemon Fulldex.app"
 rm -rf "$DIST"
 mkdir -p "$APP/Contents/MacOS" "$APP/Contents/Resources/data"
 cp build-mac/ssrecomp "$APP/Contents/MacOS/pokemon-ds-wide"
@@ -101,8 +101,8 @@ cat > "$APP/Contents/Info.plist" <<PLIST
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0"><dict>
-<key>CFBundleName</key><string>Pokemon DS Widescreen</string>
-<key>CFBundleDisplayName</key><string>Pokemon DS Widescreen</string>
+<key>CFBundleName</key><string>Pokémon Fulldex</string>
+<key>CFBundleDisplayName</key><string>Pokémon Fulldex</string>
 <key>CFBundleIdentifier</key><string>io.github.mamesj.pokemonds</string>
 <key>CFBundleExecutable</key><string>pokemon-ds-wide</string>
 <key>CFBundlePackageType</key><string>APPL</string>
@@ -135,11 +135,11 @@ else
 fi
 
 ZIP="$DIST/pokemon-ds-wide-pc-macos-$ARCH.zip"
-(cd "$DIST" && ditto -c -k --sequesterRsrc --keepParent "Pokemon DS Widescreen.app" "$ZIP")
+(cd "$DIST" && ditto -c -k --sequesterRsrc --keepParent "Pokemon Fulldex.app" "$ZIP")
 # Only the program, its tables, notes, licence and icon: never a ROM, save or game code.
 python3 - "$ZIP" <<'PY'
 import re, sys, zipfile
-ok = re.compile(r'^Pokemon DS Widescreen\.app/(Contents/(Info\.plist|MacOS/(pokemon-ds-wide)?|_CodeSignature/(CodeResources)?|Resources/(AppIcon\.icns|README\.txt|LICENSE\.txt|data/|data/funcs/|data/funcs/(IREO|IRDO|IRBO|IRAO|CPUE|IREF|IRDF|CPUF|IRBF|IRAF)\.txt)?)?)?$')
+ok = re.compile(r'^Pokemon Fulldex\.app/(Contents/(Info\.plist|MacOS/(pokemon-ds-wide)?|_CodeSignature/(CodeResources)?|Resources/(AppIcon\.icns|README\.txt|LICENSE\.txt|data/|data/funcs/|data/funcs/(IREO|IRDO|IRBO|IRAO|CPUE|IREF|IRDF|CPUF|IRBF|IRAF)\.txt)?)?)?$')
 names = zipfile.ZipFile(sys.argv[1]).namelist()
 bad = [n for n in names if not ok.match(n)]
 if bad: sys.exit('unexpected files in the Mac download: %s' % bad)

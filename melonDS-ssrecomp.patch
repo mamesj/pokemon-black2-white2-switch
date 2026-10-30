@@ -1786,7 +1786,7 @@ index 4beaf8f..bf419de 100644
  
      typedef void (*DrawPixel)(u32* dst, u16 color, u32 flag);
 diff --git a/src/GPU3D.cpp b/src/GPU3D.cpp
-index 1204741..764614c 100644
+index 1204741..22f58ea 100644
 --- a/src/GPU3D.cpp
 +++ b/src/GPU3D.cpp
 @@ -16,6 +16,8 @@
@@ -1891,23 +1891,33 @@ index 1204741..764614c 100644
      {
          LastStripPolygon = NULL;
          DispCnt |= (1<<13);
-@@ -1589,6 +1636,15 @@ void GPU3D::BoxTest(const u32* params) noexcept
+@@ -1589,6 +1636,25 @@ void GPU3D::BoxTest(const u32* params) noexcept
          cube[i].Position[3] = ((s64)x*ClipMatrix[3] + (s64)y*ClipMatrix[7] + (s64)z*ClipMatrix[11] + (s64)0x1000*ClipMatrix[15]) >> 12;
      }
  
 +    // ssrecomp: with the widescreen world on, the test is made against the wide view, so
 +    // that the game also draws what is only visible beside the DS's own picture. This is
 +    // the one place where widescreen changes what the game itself sees.
++    //
++    // And against a view a tenth larger every way: the boxes games test are not always
++    // the whole of what is drawn (Black 2's rocks and lamp posts beside the stairs up to
++    // Aspertia City's lookout went out of the picture's bottom edge a few pixels before
++    // they had left it, and the trees and posts at the wide view's sides likewise), so
++    // things vanished, or appeared, while still in sight. What is beyond the view is cut
++    // off by the clipping as ever: it only costs the geometry engine a little more work.
 +    if (Wide.Owner == this && Wide.ViewWidth > 256)
 +    {
 +        for (int i = 0; i < 8; i++)
-+            cube[i].Position[0] = (s32)((s64)cube[i].Position[0] * 256 / (s64)Wide.ViewWidth);
++        {
++            cube[i].Position[0] = (s32)((s64)cube[i].Position[0] * 256 * 9 / ((s64)Wide.ViewWidth * 10));
++            cube[i].Position[1] = (s32)((s64)cube[i].Position[1] * 9 / 10);
++        }
 +    }
 +
      // front face (-Z)
      face[0] = cube[0]; face[1] = cube[1]; face[2] = cube[2]; face[3] = cube[3];
      res = ClipPolygon<false>(*this, face, 4, 0);
-@@ -1764,6 +1820,13 @@ void GPU3D::ExecuteCommand() noexcept
+@@ -1764,6 +1830,13 @@ void GPU3D::ExecuteCommand() noexcept
      {
          // fast path for command which only have a single parameter
  
@@ -1921,7 +1931,7 @@ index 1204741..764614c 100644
          /*printf("[GXS:%08X] 0x%02X,  0x%08X", GXStat, entry.Command, entry.Param);*/
  
          switch (entry.Command)
-@@ -2116,6 +2179,9 @@ void GPU3D::ExecuteCommand() noexcept
+@@ -2116,6 +2189,9 @@ void GPU3D::ExecuteCommand() noexcept
      }
      else
      {
@@ -1931,7 +1941,7 @@ index 1204741..764614c 100644
          ExecParams[ExecParamCount] = entry.Param;
          ExecParamCount++;
  
-@@ -2375,6 +2441,7 @@ void GPU3D::FinishWork(s32 cycles) noexcept
+@@ -2375,6 +2451,7 @@ void GPU3D::FinishWork(s32 cycles) noexcept
  
  void GPU3D::Run() noexcept
  {
@@ -1939,7 +1949,7 @@ index 1204741..764614c 100644
      if (!GeometryEnabled || FlushRequest ||
          (CmdPIPE.IsEmpty() && !(GXStat & (1<<27))))
      {
-@@ -2456,12 +2523,49 @@ bool YSort(Polygon* a, Polygon* b)
+@@ -2456,12 +2533,70 @@ bool YSort(Polygon* a, Polygon* b)
      return a->SortKey < b->SortKey;
  }
  
@@ -1971,6 +1981,27 @@ index 1204741..764614c 100644
 +        WideReplay(*this, true, InterpVertexRAM.data(), InterpPolygonRAM.data(), InterpRenderPolygonRAM.data(),
 +            InterpNumPolygons, matched);
 +    InterpPending = InterpNumPolygons && matched * 2 >= frameSize;
++    // ssrecomp: why an in-between frame was left out, in game.log (the first 400; and every one
++    // with SSR_INTERP_LOG): too few polygons found in both frames.
++    if (!InterpPending)
++        InterpSkipLog("matched", (u32)matched, (u32)frameSize);
++}
++
++// ssrecomp: one line in game.log per in-between frame left out, saying why (see VBlank and
++// BuildInterpolatedFrame). A frame of 60 left without one shows as a jolt in the motion.
++void GPU3D::InterpSkipLog(const char* why, u32 a, u32 b) noexcept
++{
++    static const bool all = getenv("SSR_INTERP_LOG") != nullptr;
++    static u32 logged = 0;
++    InterpSkipped++;
++    if (!all && logged >= 400) return;
++    logged++;
++    if (!strcmp(why, "matched"))
++        fprintf(stderr, "[60fps] vblank %u: no in-between frame: %u of %u polygons found in the frame before\n", VBlankCount, a, b);
++    else if (!strcmp(why, "gap"))
++        fprintf(stderr, "[60fps] vblank %u: no in-between frame: the game's 3D frame took %u display frames, not 2\n", VBlankCount, a);
++    else
++        fprintf(stderr, "[60fps] vblank %u: no in-between frame: %s\n", VBlankCount, why);
 +}
 +
  void GPU3D::VBlank() noexcept
@@ -1989,7 +2020,7 @@ index 1204741..764614c 100644
              if (FlushRequest)
              {
                  if (NumPolygons)
-@@ -2487,6 +2591,41 @@ void GPU3D::VBlank() noexcept
+@@ -2487,6 +2622,44 @@ void GPU3D::VBlank() noexcept
  
                  RenderNumPolygons = NumPolygons;
                  RenderFrameIdentical = false;
@@ -2002,6 +2033,9 @@ index 1204741..764614c 100644
 +                {
 +                    const bool capturing = (NDS.GPU.GPU2D_A.CaptureCnt & (1u << 31)) != 0;
 +                    const bool interpolate = InterpolationEnabled && VBlankCount - LastFlushVBlank == 2 && !capturing;
++                    // (A game drawing at 60 frames a second needs none: a gap of 1 is not logged.)
++                    if (InterpolationEnabled && !interpolate && VBlankCount - LastFlushVBlank != 1)
++                        InterpSkipLog(capturing ? "the screen is being captured" : "gap", VBlankCount - LastFlushVBlank, 0);
 +                    // ssrecomp: the wide view's lists are built on a helper thread where there is
 +                    // one (WideListsOnHelper), started first so that they are ready by the time
 +                    // the in-between frame is drawn; they are built with the in-between lists
@@ -2031,7 +2065,7 @@ index 1204741..764614c 100644
              }
              else
              {
-@@ -2499,6 +2638,13 @@ void GPU3D::VBlank() noexcept
+@@ -2499,6 +2672,13 @@ void GPU3D::VBlank() noexcept
                      && memcmp(RenderEdgeTable, EdgeTable, 8*2) == 0
                      && memcmp(RenderFogDensityTable + 1, FogDensityTable, 32) == 0
                      && memcmp(RenderToonTable, ToonTable, 32*2) == 0;
@@ -2045,7 +2079,7 @@ index 1204741..764614c 100644
              }
  
              RenderDispCnt = DispCnt;
-@@ -2535,7 +2681,35 @@ void GPU3D::VBlank() noexcept
+@@ -2535,7 +2715,35 @@ void GPU3D::VBlank() noexcept
  
  void GPU3D::VCount215(GPU& gpu) noexcept
  {
@@ -2082,7 +2116,7 @@ index 1204741..764614c 100644
  
  void GPU3D::SetRenderXPos(u16 xpos) noexcept
 diff --git a/src/GPU3D.h b/src/GPU3D.h
-index 08c2208..8b5664e 100644
+index 08c2208..edf2d76 100644
 --- a/src/GPU3D.h
 +++ b/src/GPU3D.h
 @@ -20,6 +20,7 @@
@@ -2141,7 +2175,7 @@ index 08c2208..8b5664e 100644
  
      s32 CycleCount = 0;
      s32 VertexPipeline = 0;
-@@ -273,6 +290,12 @@ public:
+@@ -273,6 +290,13 @@ public:
  
      bool RenderFrameIdentical = false; // not part of the hardware state, don't serialize
  
@@ -2150,11 +2184,12 @@ index 08c2208..8b5664e 100644
 +    // geometry, on the first of those two frames. Only what is displayed changes.
 +    bool InterpolationEnabled = false;
 +    u32 InterpolatedFrames = 0; // statistics
++    u32 InterpSkipped = 0;      // statistics: in-between frames left out (InterpSkipLog)
 +
      bool AbortFrame = false;
  
      u64 Timestamp = 0;
-@@ -322,6 +345,33 @@ public:
+@@ -322,6 +346,34 @@ public:
      u32 CurRAMBank = 0;
  
      std::array<Polygon*,2048> RenderPolygonRAM {};
@@ -2185,6 +2220,7 @@ index 08c2208..8b5664e 100644
 +    std::array<Polygon*,2048> InterpRenderPolygonRAM {};
 +    u32 InterpNumPolygons = 0;
 +    void BuildInterpolatedFrame() noexcept;
++    void InterpSkipLog(const char* why, u32 a, u32 b) noexcept;
      u32 RenderNumPolygons = 0;
  
      u32 FlushRequest = 0;

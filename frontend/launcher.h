@@ -25,8 +25,18 @@
 namespace Launcher
 {
 
+// The consoles the list has games of, in the order its sections and tabs come in.
+enum Platform { DS, GBA, N3DS, PLATFORMS };
+inline const char* PlatformName(int p) { return p == DS ? "DS" : p == GBA ? "GBA" : "3DS"; }
+// The tabs along the top: ALL (every section, each under its console's heading), then one per
+// console.
+constexpr int TABS = 1 + PLATFORMS;
+inline const char* TabName(int t) { return t <= 0 ? "ALL" : PlatformName(t - 1); }
+inline bool InTab(int platform, int tab) { return tab <= 0 || tab == platform + 1; }
+
 struct Game
 {
+    int platform = DS;
     std::string rom;      // the ROM's full path
     std::string folder;   // where its save (and a funcs.txt of the player's own) live
     std::string code;     // the game code, e.g. IREO
@@ -40,10 +50,25 @@ struct Game
     std::vector<uint32_t> art;
     // Set when the same game is also in another folder: this one's folder, shown under it.
     std::string where;
+    // A game on its way (AddComingSoon): its tile says so and it cannot be played.
+    bool comingSoon = false;
 };
 
 // The size the larger pictures are kept at (the tiles of the list at 720 lines).
 constexpr int Art = 224;
+
+// Games on their way, in their console's section with COMING SOON over the picture: Pokemon
+// Omega Ruby on the 3DS (its picture as any game's: icons/ECRA.jpg, or SSR_PC_ART's ECRA.jpg).
+inline void AddComingSoon(std::vector<Game>& games)
+{
+    Game g;
+    g.platform = N3DS;
+    g.code = "ECRA";
+    g.rom = "coming-soon:ECRA"; // (never a file: so never the last game played, nor started)
+    g.name = "POKEMON OMEGA RUBY";
+    g.comingSoon = true;
+    games.push_back(std::move(g));
+}
 
 // The games this program plays, in the order the list shows them.
 struct KnownGame
@@ -76,10 +101,31 @@ inline const KnownGame* Known(const std::string& code)
 }
 inline int Order(const std::string& code)
 {
-    static const char* order[] = { "IRBO", "IRAO", "IREO", "IRDO", "IPKE", "IPGE", "CPUE" };
-    for (int i = 0; i < 7; i++)
-        if (code == order[i] || (code.size() == 4 && code[3] == 'F' && code.compare(0, 3, order[i], 3) == 0)) return i;
-    return 7;
+    // (DS, then GBA: Emerald, Ultra Violet (UV22: its own code here, as FireRed's is BPRE too),
+    // FireRed, LeafGreen.)
+    static const char* order[] = { "IRBO", "IRAO", "IREO", "IRDO", "IPKE", "IPGE", "CPUE", "BPEE", "UV22", "BPRE", "BPGE" };
+    for (int i = 0; i < 11; i++)
+        if (code == order[i] || (i < 7 && code.size() == 4 && code[3] == 'F' && code.compare(0, 3, order[i], 3) == 0)) return i;
+    return 11;
+}
+
+// A name as the list has it (POKEMON EMERALD) as a title: Pokemon Emerald (FireRed and LeafGreen
+// as they are spelt).
+inline std::string TitleCase(const std::string& name)
+{
+    std::string out;
+    bool start = true;
+    for (char c : name)
+    {
+        out += start ? (char)toupper((unsigned char)c) : (char)tolower((unsigned char)c);
+        start = c == ' ';
+    }
+    for (const char* word : { "Firered", "Leafgreen" })
+    {
+        const size_t at = out.find(word);
+        if (at != std::string::npos) out[at + 4] = (char)toupper((unsigned char)out[at + 4]);
+    }
+    return out;
 }
 
 inline bool EndsWithNds(const std::string& name)
@@ -323,10 +369,12 @@ inline void ScanFolder(const std::string& folder, std::vector<Game>& out, bool s
     }
 }
 
-// Known games first, in the list's order, then the rest by name.
+// By console (the list's sections), then known games first, in the list's order, then the rest
+// by name.
 inline void Sort(std::vector<Game>& games)
 {
     std::stable_sort(games.begin(), games.end(), [](const Game& a, const Game& b) {
+        if (a.platform != b.platform) return a.platform < b.platform;
         const int oa = Order(a.code), ob = Order(b.code);
         if (oa != ob) return oa < ob;
         return a.name < b.name;
@@ -343,70 +391,319 @@ struct Theme
     int bandLineH = 1;       // the band's line, in font pixels
     int frameW = 2;          // the chosen game's frame, in font pixels
     uint32_t selBar = 0;     // a bar under the chosen game's name (0: none)
+    struct Background* background = nullptr; // a picture behind the list (BACKGROUND: YOUR PICTURE)
 };
 
-// Where the list's tiles go on a canvas (Draw, and TileAt for a mouse): three across, or four
-// when there are more than six games (all seven on one screen).
+// The player's own picture behind the list (background.jpg or .png beside the saves folder; on
+// the Switch, with the saves): kept as read, and once fitted to the canvas, darkened so the
+// names stay readable.
+struct Background
+{
+    std::vector<uint32_t> px;
+    int w = 0, h = 0;
+    std::vector<uint32_t> fit;
+    int fw = 0, fh = 0;
+    // The picture covering a w x h canvas (cut at the sides or top and bottom), or nullptr.
+    const uint32_t* Fitted(int cw, int ch)
+    {
+        if (px.empty() || cw <= 0 || ch <= 0) return nullptr;
+        if (fw == cw && fh == ch) return fit.data();
+        fit.assign((size_t)cw * ch, 0);
+        const double sc = std::max((double)cw / w, (double)ch / h);
+        const int ox = (int)((w * sc - cw) / 2), oy = (int)((h * sc - ch) / 2);
+        for (int y = 0; y < ch; y++)
+        {
+            const int sy = std::min(h - 1, (int)((y + oy) / sc));
+            for (int x = 0; x < cw; x++)
+            {
+                const uint32_t p = px[(size_t)sy * w + std::min(w - 1, (int)((x + ox) / sc))];
+                // (A third of its brightness: the grey names stayed hard to read on a bright one
+                // at two fifths.)
+                const uint32_t r = (p >> 16 & 0xFF) / 3, g = (p >> 8 & 0xFF) / 3, b = (p & 0xFF) / 3;
+                fit[(size_t)y * cw + x] = 0xFF000000u | r << 16 | g << 8 | b;
+            }
+        }
+        fw = cw;
+        fh = ch;
+        return fit.data();
+    }
+};
+
+// The accent colour of the list (COLOUR on the settings page): the band's line, the chosen
+// game's frame and its save line.
+inline Theme ThemeNamed(const std::string& colour)
+{
+    Theme t;
+    t.bandLine = t.frame = t.subSel = AccentNamed(colour); // (ui.h; red when not set)
+    return t;
+}
+
+// A setting's value in a settings file ("" when it has none).
+inline std::string ConfigValue(const std::string& cfg, const char* key)
+{
+    std::string out;
+    if (FILE* f = fopen(cfg.c_str(), "r"))
+    {
+        char buf[512];
+        const size_t n = strlen(key);
+        while (fgets(buf, sizeof buf, f))
+            if (!strncmp(buf, key, n) && buf[n] == '=')
+            {
+                out = buf + n + 1;
+                while (!out.empty() && (out.back() == '\n' || out.back() == '\r')) out.pop_back();
+            }
+        fclose(f);
+    }
+    return out;
+}
+
+// The list's look from the settings file (COLOUR, BACKGROUND): the picture read from `folder`
+// (background.jpg or .png), at most 2048 pixels on a side (larger ones are read at a fraction).
+inline void LoadLook(const std::string& cfg, const std::string& folder, Theme& t, Background& b)
+{
+    t = ThemeNamed(ConfigValue(cfg, "list_colour"));
+    b = Background();
+    t.background = nullptr;
+    if (ConfigValue(cfg, "list_background") != "picture") return;
+    std::vector<unsigned char> data;
+    for (const char* name : { "/background.jpg", "/background.png", "/background.jpeg" })
+    {
+        if (!ReadFile(folder + name, data)) continue;
+        int w = 0, h = 0, n = 0;
+        unsigned char* px = stbi_load_from_memory(data.data(), (int)data.size(), &w, &h, &n, 4);
+        if (!px) continue;
+        const int step = std::max(1, (std::max(w, h) + 2047) / 2048);
+        b.w = w / step;
+        b.h = h / step;
+        b.px.resize((size_t)b.w * b.h);
+        for (int y = 0; y < b.h; y++)
+            for (int x = 0; x < b.w; x++)
+            {
+                const unsigned char* p = px + ((size_t)y * step * w + (size_t)x * step) * 4;
+                b.px[(size_t)y * b.w + x] = 0xFF000000u | p[0] << 16 | p[1] << 8 | p[2];
+            }
+        stbi_image_free(px);
+        t.background = &b;
+        return;
+    }
+}
+
+// Where the list's parts go on a canvas: the title band, the tabs under it, then the games'
+// tiles (each the game's picture with its name below), four across at most, in a part of their
+// own that scrolls: the content, with y from its top.
 struct Grid
 {
-    int s, gap, labelH, top, bottom, tile, cols, rows, gx;
+    int s, gap, labelH, tabsY, tabsH, headH, top, bottom, tile, cols, gx;
+    int rowH() const { return tile + labelH + gap; }
 };
-inline Grid Layout(const Canvas& c, int count)
+inline Grid Layout(const Canvas& c)
 {
     Grid g;
     g.s = std::max(1, c.h / 240); // the font's scale: 3 at 720 lines
-    // Tiles three across and two rows down (six games on one screen), at most Art x Art at 720
-    // lines.
     g.gap = 8 * g.s;
     g.labelH = 20 * g.s;
-    g.top = 28 * g.s;
+    g.tabsY = 25 * g.s;
+    g.tabsH = 13 * g.s;
+    g.headH = 13 * g.s;
+    g.top = g.tabsY + g.tabsH + 5 * g.s;
     g.bottom = c.h - 16 * g.s;
-    g.tile = std::max(32, std::min(Art * c.h / 720, (g.bottom - g.top) / 2 - g.labelH - g.gap));
-    g.cols = std::max(1, std::min(count > 6 ? 4 : 3, (c.w - g.gap) / (g.tile + g.gap * 3)));
-    g.rows = std::max(1, (g.bottom - g.top) / (g.tile + g.labelH + g.gap));
+    // Tiles at most Art x Art at 720 lines, small enough for two rows and a heading on a screen.
+    g.tile = std::max(32, std::min(Art * c.h / 720, (g.bottom - g.top - g.headH) / 2 - g.labelH - g.gap));
+    g.cols = std::max(1, std::min(4, (c.w - g.gap) / (g.tile + g.gap * 3)));
     const int gridW = g.cols * g.tile + (g.cols - 1) * g.gap * 3;
     g.gx = (c.w - gridW) / 2;
     return g;
 }
 
-// The game whose tile (with its name below it) is at x, y on the canvas, or -1.
-inline int TileAt(const Canvas& c, int count, int first, int x, int y)
+// What one tab shows: each game's tile and each console's heading (on ALL) or the line saying it
+// has none yet, in content coordinates.
+struct View
 {
-    const Grid g = Layout(c, count);
-    for (int i = first * g.cols; i < count && i < (first + g.rows) * g.cols; i++)
+    struct Spot { int game, x, y, section; };
+    struct Head { int platform, y; bool empty; };
+    Grid g;
+    int tab = 0;
+    std::vector<Spot> spots;
+    std::vector<Head> heads;
+    int height = 0;
+    // The spot of game i, or -1.
+    int SpotOf(int game) const
     {
-        const int tx = g.gx + (i % g.cols) * (g.tile + g.gap * 3), ty = g.top + (i / g.cols - first) * (g.tile + g.labelH + g.gap);
-        if (x >= tx && x < tx + g.tile && y >= ty && y < ty + g.tile + g.labelH) return i;
+        for (size_t k = 0; k < spots.size(); k++)
+            if (spots[k].game == game) return (int)k;
+        return -1;
+    }
+};
+inline View MakeView(const Canvas& c, const std::vector<Game>& games, int tab)
+{
+    View v;
+    v.g = Layout(c);
+    v.tab = tab;
+    const Grid& g = v.g;
+    const int emptyH = 16 * g.s;
+    int y = 0;
+    for (int p = 0; p < PLATFORMS; p++)
+    {
+        if (!InTab(p, tab)) continue;
+        std::vector<int> mine;
+        for (size_t i = 0; i < games.size(); i++)
+            if (games[i].platform == p) mine.push_back((int)i);
+        // (ALL: every console under its heading, also one without games yet.)
+        if (tab == 0)
+        {
+            v.heads.push_back({ p, y, false });
+            y += g.headH;
+        }
+        if (mine.empty())
+        {
+            v.heads.push_back({ p, y, true });
+            y += emptyH + g.gap;
+            continue;
+        }
+        for (size_t k = 0; k < mine.size(); k++)
+            v.spots.push_back({ mine[k], g.gx + (int)(k % g.cols) * (g.tile + g.gap * 3), y + (int)(k / g.cols) * g.rowH(), p });
+        y += (int)((mine.size() + g.cols - 1) / g.cols) * g.rowH() + g.gap;
+    }
+    v.height = y;
+    return v;
+}
+
+// Keeps the chosen game in view (with its console's heading when it is in the first row under
+// it): scroll is how far down the content the screen is. follow false: only kept within the
+// content (a finger scrolling the list).
+inline void FollowSelection(const View& v, int selected, int& scroll, bool follow = true)
+{
+    const Grid& g = v.g;
+    const int viewH = g.bottom - g.top;
+    const int k = follow ? v.SpotOf(selected) : -1;
+    if (k >= 0)
+    {
+        int top = v.spots[k].y;
+        for (const View::Head& h : v.heads)
+            if (!h.empty && h.platform == v.spots[k].section && top - h.y <= g.headH) top = h.y;
+        const int bottom = v.spots[k].y + g.tile + g.labelH;
+        if (top < scroll) scroll = top;
+        if (bottom > scroll + viewH) scroll = bottom - viewH;
+    }
+    scroll = std::max(0, std::min(scroll, std::max(0, v.height - viewH)));
+}
+
+// The game whose tile (with its name below it) is at x, y on the canvas, or -1.
+inline int TileAt(const View& v, int scroll, int x, int y)
+{
+    const Grid& g = v.g;
+    if (y < g.top || y >= g.bottom) return -1;
+    for (const View::Spot& sp : v.spots)
+    {
+        const int ty = g.top + sp.y - scroll;
+        if (x >= sp.x && x < sp.x + g.tile && y >= ty && y < ty + g.tile + g.labelH) return sp.game;
     }
     return -1;
 }
 
-// The list, drawn over the whole canvas (1280x720 on the Switch): a grid of tiles, each the
-// game's picture (or its DS icon, enlarged) with its name and whether it has a save. first is the
-// first row shown. hint: the line along the bottom (the Switch's buttons when empty). Returns the
-// number of columns, for moving up and down.
-inline int Draw(Canvas& c, const std::vector<Game>& games, int selected, int& first, const std::string& note,
-                const std::string& hintText = std::string(), const Theme& th = Theme())
+// Where the tabs are drawn (TabsDraw) and which one is at x, y, or -1.
+inline int TabX(const Canvas& c, const Grid& g, int t)
 {
-    const Grid grid = Layout(c, (int)games.size());
+    const int step = 22 * 6 * g.s / 3; // (each tab's room, at the font's scale)
+    return c.w / 2 + (t * 2 - (TABS - 1)) * step / 2;
+}
+inline int TabAt(const Canvas& c, int x, int y)
+{
+    const Grid g = Layout(c);
+    if (y < g.tabsY - 3 * g.s || y >= g.tabsY + g.tabsH + 3 * g.s) return -1;
+    const int step = 22 * 6 * g.s / 3;
+    for (int t = 0; t < TABS; t++)
+        if (std::abs(x - TabX(c, g, t)) < step / 2) return t;
+    return -1;
+}
+
+// The next game from `selected` in direction dir (1 left, 2 right, 3 up, 4 down): left and right
+// go through the tab's games in order, up and down to the nearest tile in the row above or below
+// (across the headings). -1 when there is nothing that way (up from the first row: the caller's
+// title band; down from the last: stay).
+inline int Step(const View& v, int selected, int dir)
+{
+    const int k = v.SpotOf(selected);
+    if (k < 0) return v.spots.empty() ? -1 : v.spots[0].game;
+    if (dir == 1) return k > 0 ? v.spots[k - 1].game : selected;
+    if (dir == 2) return k + 1 < (int)v.spots.size() ? v.spots[k + 1].game : selected;
+    // The row above or below: the nearest y beyond this one, then the nearest x in it.
+    const int y = v.spots[k].y, x = v.spots[k].x;
+    int rowY = -1;
+    for (const View::Spot& sp : v.spots)
+        if ((dir == 3 ? sp.y < y : sp.y > y) && (rowY < 0 || (dir == 3 ? sp.y > rowY : sp.y < rowY))) rowY = sp.y;
+    if (rowY < 0) return dir == 3 ? -1 : selected;
+    int best = -1, bestD = 0;
+    for (const View::Spot& sp : v.spots)
+        if (sp.y == rowY && (best < 0 || std::abs(sp.x - x) < bestD))
+        {
+            best = sp.game;
+            bestD = std::abs(sp.x - x);
+        }
+    return best;
+}
+
+// A tab's own first game (when the one chosen is not in it), or -1 when it has none.
+inline int FirstIn(const View& v) { return v.spots.empty() ? -1 : v.spots[0].game; }
+
+// The list, drawn over the whole canvas (1280x720 on the Switch): the title band, the tabs, then
+// the tab's games as tiles, each the game's picture (or its DS icon, enlarged) with its name and
+// whether it has a save, under each console's heading on ALL. selected: -1 for none. scroll is
+// kept so the chosen game is in view (follow false: as it is, a finger having scrolled the list).
+// hint: the line along the bottom (the Switch's buttons when empty). onTabs: the tabs are chosen
+// (up from the first row of games; left and right then change the tab), the shown one framed.
+inline void Draw(Canvas& c, const std::vector<Game>& games, int tab, int selected, int& scroll, const std::string& note,
+                 const std::string& hintText = std::string(), const Theme& th = Theme(), bool follow = true, bool onTabs = false)
+{
+    const View v = MakeView(c, games, tab);
+    const Grid& grid = v.g;
     const int s = grid.s;
     c.Fill(0, 0, c.w, c.h, th.bg);
+    if (th.background)
+        if (const uint32_t* bgPx = th.background->Fitted(c.w, c.h)) std::copy(bgPx, bgPx + (size_t)c.w * c.h, c.px.begin());
     // A band along the top with the title.
     c.Fill(0, 0, c.w, 22 * s, th.band);
     c.Fill(0, 22 * s, c.w, th.bandLineH * s, th.bandLine);
-    const std::string title = "POKEMON DS WIDESCREEN";
+    const std::string title = "POK\x05MON FULLDEX"; // (Pokémon Fulldex: \x05 is the font's É, ui.h)
     c.Text((c.w - Canvas::TextWidth(title, s + 1)) / 2, 6 * s, title, s + 1, th.title);
-
-    const int gap = grid.gap, labelH = grid.labelH, top = grid.top, bottom = grid.bottom;
-    const int tile = grid.tile, cols = grid.cols, rows = grid.rows, gx = grid.gx;
-    const int selRow = selected / cols;
-    if (selRow < first) first = selRow;
-    if (selRow >= first + rows) first = selRow - rows + 1;
-    for (int i = first * cols; i < (int)games.size() && i < (first + rows) * cols; i++)
+    // The tabs: the chosen one bright and underlined.
+    for (int t = 0; t < TABS; t++)
     {
-        const Game& g = games[i];
-        const bool sel = i == selected;
-        const int x = gx + (i % cols) * (tile + gap * 3), y = top + (i / cols - first) * (tile + labelH + gap);
+        const std::string name = TabName(t);
+        const int x = TabX(c, grid, t) - Canvas::TextWidth(name, s) / 2, y = grid.tabsY + 3 * s;
+        if (onTabs && t == tab) c.Fill(x - 3 * s, y - 3 * s, Canvas::TextWidth(name, s) + 5 * s, 13 * s, th.frame);
+        c.Text(x, y, name, s, t == tab ? th.title : th.hint);
+        if (t == tab) c.Fill(x - 2 * s, grid.tabsY + grid.tabsH - s, Canvas::TextWidth(name, s) + 3 * s, s, th.frame);
+    }
+
+    FollowSelection(v, selected, scroll, follow);
+    const int top = grid.top, bottom = grid.bottom, tile = grid.tile, labelH = grid.labelH;
+    // The headings (on ALL): the console's name and a line to the right edge of the tiles.
+    for (const View::Head& h : v.heads)
+    {
+        const int y = top + h.y - scroll;
+        if (h.empty)
+        {
+            const std::string none = std::string("NO ") + PlatformName(h.platform) + " GAMES YET";
+            // (On its own tab: in the middle of the page.)
+            if (tab != 0) c.Text((c.w - Canvas::TextWidth(none, s)) / 2, (top + bottom) / 2 - 4 * s, none, s, th.hint);
+            else if (y >= top && y + 10 * s <= bottom) c.Text(grid.gx, y + 2 * s, none, s, th.hint);
+            continue;
+        }
+        if (y < top || y + 10 * s > bottom) continue;
+        const std::string name = PlatformName(h.platform);
+        c.Text(grid.gx, y + s, name, s + 1, th.frame);
+        const int lx = grid.gx + Canvas::TextWidth(name, s + 1) + 4 * s;
+        const int rx = grid.gx + grid.cols * tile + (grid.cols - 1) * grid.gap * 3;
+        if (rx > lx) c.Fill(lx, y + 6 * s, rx - lx, std::max(1, s / 2), th.tile);
+    }
+    // The tiles that are wholly in view.
+    for (const View::Spot& sp : v.spots)
+    {
+        const int x = sp.x, y = top + sp.y - scroll;
+        if (y < top || y + tile + labelH > bottom) continue;
+        const Game& g = games[sp.game];
+        const bool sel = sp.game == selected;
         // A frame round the chosen one.
         if (sel) c.Fill(x - th.frameW * s, y - th.frameW * s, tile + 2 * th.frameW * s, tile + 2 * th.frameW * s, th.frame);
         c.Fill(x, y, tile, tile, th.tile);
@@ -431,23 +728,36 @@ inline int Draw(Canvas& c, const std::vector<Game>& games, int selected, int& fi
                 for (int px = 0; px < 32; px++)
                     if (g.icon[py * 32 + px] >> 24) c.Fill(x + o + px * is, y + o + py * is, is, is, g.icon[py * 32 + px]);
         }
+        // COMING SOON across the picture of a game on its way, the picture darkened.
+        if (g.comingSoon)
+        {
+            for (int py = 0; py < tile; py++)
+                for (int px = 0; px < tile; px++)
+                {
+                    uint32_t& p = c.px[(size_t)(y + py) * c.w + x + px];
+                    p = 0xFF000000u | ((p >> 1) & 0x7F7F7F);
+                }
+            const std::string soon = "COMING SOON";
+            const int bs = Canvas::TextWidth(soon, s) + 8 * s <= tile ? s : std::max(1, s - 1);
+            c.Fill(x, y + tile / 2 - 8 * bs, tile, 16 * bs, th.band);
+            c.Text(x + (tile - Canvas::TextWidth(soon, bs)) / 2, y + tile / 2 - 4 * bs, soon, bs, th.title);
+        }
         // The name (shortened: POKEMON is the same for all) and the save.
         std::string name = g.name;
         if (name.rfind("POKEMON ", 0) == 0) name = name.substr(8);
         const int ns = Canvas::TextWidth(name, s) <= tile ? s : std::max(1, s - 1);
         c.Text(x + (tile - Canvas::TextWidth(name, ns)) / 2, y + tile + 3 * s, name, ns, sel ? th.nameSel : th.name);
         if (sel && th.selBar) c.Fill(x + tile / 4, y + tile + 19 * s, tile / 2, s, th.selBar);
-        std::string sub = !g.known ? "NOT PLAYABLE" : g.hasSave ? "SAVE FOUND" : "NEW GAME";
+        std::string sub = g.comingSoon ? "COMING SOON" : !g.known ? "NOT PLAYABLE" : g.hasSave ? "SAVE FOUND" : "NEW GAME";
         if (!g.where.empty() && g.known) sub = (g.hasSave ? "SAVE " : "NEW ") + g.where; // e.g. SAVE IN BLACK2
         const int ss = std::max(1, s * 2 / 3);
-        c.Text(x + (tile - Canvas::TextWidth(sub, ss)) / 2, y + tile + 12 * s, sub, ss, !g.known ? th.bad : sel ? th.subSel : th.sub);
+        c.Text(x + (tile - Canvas::TextWidth(sub, ss)) / 2, y + tile + 12 * s, sub, ss, !g.known && !g.comingSoon ? th.bad : sel ? th.subSel : th.sub);
     }
-    // More games above or below the ones shown.
-    if (first > 0) c.Fill(c.w / 2 - 8 * s, top - 4 * s, 16 * s, s, th.hint);
-    if ((first + rows) * cols < (int)games.size()) c.Fill(c.w / 2 - 8 * s, bottom - 2 * s, 16 * s, s, th.hint);
-    const std::string hint = !note.empty() ? note : !hintText.empty() ? hintText : "A: PLAY    Y: SETTINGS    +: QUIT";
+    // More games below the ones shown. (None drawn for above: under the tabs it looked like one
+    // of their underlines, and the cut tiles at the top say it already.)
+    if (scroll + (bottom - top) < v.height - grid.gap) c.Fill(c.w / 2 - 8 * s, bottom - 2 * s, 16 * s, s, th.hint);
+    const std::string hint = !note.empty() ? note : !hintText.empty() ? hintText : "A: PLAY    Y: SETTINGS    L / R: TABS    +: QUIT";
     c.Text((c.w - Canvas::TextWidth(hint, s)) / 2, c.h - 12 * s, hint, s, th.hint);
-    return cols;
 }
 
 // The settings page (Y on the Switch's list, H or a controller's Y on a PC's): the pause menu's
@@ -516,6 +826,8 @@ inline std::vector<Setting> SettingsList()
 #endif
 #endif
     l.push_back({ "show_fps", "FPS COUNTER", onOff, "0", "SHOWS THE FRAMES A SECOND IN A CORNER." });
+    l.push_back({ "volume", "VOLUME", { { "0", "OFF" }, { "10", "10%" }, { "20", "20%" }, { "30", "30%" }, { "40", "40%" }, { "50", "50%" }, { "60", "60%" }, { "70", "70%" }, { "80", "80%" }, { "90", "90%" }, { "100", "100%" } }, "100",
+                  "THE GAME'S SOUND AND MUSIC. OFF FOR NONE. ALSO IN THE PAUSE MENU WHILE YOU PLAY." });
 #ifdef __SWITCH__
     l.push_back({ "start_button", "START BUTTON", { { "menu", "PAUSE MENU" }, { "ds", "DS START" } }, "menu",
                   "PAUSE MENU: + OPENS THE PAUSE MENU WHILE PLAYING. DS START: + IS THE DS START BUTTON (THE GAMES HARDLY USE IT) AND + AND - TOGETHER OPEN THE MENU." });
@@ -547,13 +859,31 @@ inline std::vector<Setting> SettingsList()
     l.push_back({ "!forwarders", "HOME MENU ICONS", { { "", "INSTALL" } }, "",
                   "PUTS AN ICON FOR EACH GAME IN THIS LIST ON THE HOME MENU WITH ITS PICTURE. IT STARTS THAT GAME STRAIGHT AWAY. MADE ON THIS CONSOLE: NO PC OR KEYS FILE NEEDED. LIKE ANY FORWARDER THE ICONS NEED SIGPATCHES TO START. INSTALL AGAIN AFTER ADDING GAMES. REMOVE ONE IN THE HOME MENU (OPTIONS / DELETE SOFTWARE)." });
 #endif
+    // The game list's own look (GAME LIST: ThemeNamed, Background).
+    l.push_back({ "list_colour", "COLOUR", { { "red", "RED" }, { "blue", "BLUE" }, { "green", "GREEN" }, { "purple", "PURPLE" },
+                  { "gold", "GOLD" }, { "pink", "PINK" }, { "teal", "TEAL" } }, "red",
+                  "THE GAME LIST'S COLOUR: ITS LINES, THE FRAME ROUND THE CHOSEN GAME AND THE TABS." });
+#ifdef __SWITCH__
+    l.push_back({ "list_background", "BACKGROUND", { { "plain", "PLAIN" }, { "picture", "YOUR PICTURE" } }, "plain",
+                  "YOUR PICTURE: PUT A PICTURE NAMED BACKGROUND.JPG OR BACKGROUND.PNG IN /SWITCH/POKEMON-DS-WIDE/ (WITH YOUR SAVES). BEST AT 1280 X 720 OR 1920 X 1080 (16:9); ANY SIZE WORKS, CUT TO FILL THE SCREEN. IT IS SHOWN DARKENED BEHIND THE GAMES." });
+#else
+    l.push_back({ "list_background", "BACKGROUND", { { "plain", "PLAIN" }, { "picture", "YOUR PICTURE" } }, "plain",
+                  "YOUR PICTURE: PUT A PICTURE NAMED BACKGROUND.JPG OR BACKGROUND.PNG BESIDE YOUR SAVES FOLDER. BEST AT 1920 X 1080 (16:9); ANY SIZE WORKS, CUT TO FILL THE SCREEN. IT IS SHOWN DARKENED BEHIND THE GAMES." });
+#endif
+#if !defined(__SWITCH__)
+    // RetroAchievements from the game list too (pc_launcher.cpp: the login, as the pause menu's).
+    l.push_back({ "ra", "RETROACHIEVEMENTS", onOff, "0",
+                  "ON: YOUR RETROACHIEVEMENTS ACCOUNT FOLLOWS THE GAMES YOU PLAY AND UNLOCKS POP UP AS YOU PLAY (CASUAL MODE: SAVE STATES AND FAST FORWARD STILL WORK; PAUSED WHILE A CHEAT IS ON)." });
+    l.push_back({ "!ra_login", "ACCOUNT", { { "", "LOG IN" } }, "",
+                  "LOG IN WITH YOUR RETROACHIEVEMENTS USER NAME AND PASSWORD (A FREE ACCOUNT FROM RETROACHIEVEMENTS.ORG). THE PASSWORD IS SENT ONCE AND NOT KEPT. CHOSEN AGAIN WHEN LOGGED IN: LOG OUT." });
+#endif
     // Only in the pause menu.
 #ifdef __SWITCH__
     l.push_back({ nullptr, "THE PAUSE MENU", {}, "", "PRESS + WHILE PLAYING (+ AND - TOGETHER WITH START BUTTON ON DS START). EVERYTHING ABOVE IS THERE TOO AND CAN BE CHANGED AS YOU PLAY." });
     l.push_back({ nullptr, "FAST FORWARD", {}, "", "HOLD ZR (UP TO 4X). FAST FORWARD IN THE PAUSE MENU KEEPS IT ON WITHOUT HOLDING." });
 #elif defined(SSR_PHONE)
     l.push_back({ nullptr, "THE PAUSE MENU", {}, "", "THE MENU BUTTON AT THE TOP OF THE SCREEN WHILE PLAYING OR START OR GUIDE ON A CONTROLLER. EVERYTHING ABOVE IS THERE TOO." });
-    l.push_back({ nullptr, "FAST FORWARD", {}, "", "HOLD THE RIGHT TRIGGER OF A CONTROLLER (UP TO 4X). FAST FORWARD IN THE PAUSE MENU KEEPS IT ON WITHOUT HOLDING." });
+    l.push_back({ nullptr, "FAST FORWARD", {}, "", "HOLD THE >> BUTTON BESIDE R AT THE TOP, OR THE RIGHT TRIGGER OF A CONTROLLER (UP TO 4X). FAST FORWARD IN THE PAUSE MENU KEEPS IT ON WITHOUT HOLDING." });
 #else
     l.push_back({ nullptr, "THE PAUSE MENU", {}, "", "ESC ON THE KEYBOARD. ON A CONTROLLER: START (MENU ON XBOX / OPTIONS ON PS) OR ITS GUIDE BUTTON. EVERYTHING ABOVE IS THERE TOO." });
     l.push_back({ nullptr, "FAST FORWARD", {}, "", "HOLD THE RIGHT TRIGGER OR LEFT SHIFT (UP TO 4X). FAST FORWARD IN THE PAUSE MENU KEEPS IT ON WITHOUT HOLDING." });
@@ -605,26 +935,32 @@ inline const std::vector<SettingsGroup>& SettingsGroups()
     static const std::vector<SettingsGroup> g = {
         // (What each holds is listed under it: its options' names, ShowGroups.)
         { "!group0", "DISPLAY", "" },
-        { "!group1", "GRAPHICS", "" },
-        { "!group2", "CONTROLS", "" },
-        { "!group3", "SHORTCUTS", "" },
-        { "!group4", "HELP", "" },
+        { "!group1", "SOUND", "" },
+        { "!group2", "GRAPHICS", "" },
+        { "!group3", "CONTROLS", "" },
+        { "!group4", "SHORTCUTS", "" },
+        { "!group5", "GAME LIST", "" },
+        { "!group6", "RETROACHIEVEMENTS", "" },
+        { "!group7", "HELP", "" },
     };
     return g;
 }
 // Which group an option is in (SettingsGroups).
 inline int GroupOf(const Setting& s)
 {
-    if (!s.key) return !strcmp(s.name, "KEYS AND BUTTONS") ? 2 : 4;
+    if (!s.key) return !strcmp(s.name, "KEYS AND BUTTONS") ? 3 : 7;
+    if (!strncmp(s.key, "list_", 5)) return 5;
+    if (!strcmp(s.key, "ra") || !strcmp(s.key, "!ra_login")) return 6;
     static const char* display[] = { "view", "large_screen", "fullscreen", "smooth", "battle_buttons", "show_fps" };
     static const char* controls[] = { "start_button", "buttons", "pad_touch" };
     for (const char* k : display)
         if (!strcmp(s.key, k)) return 0;
+    if (!strcmp(s.key, "volume")) return 1;
     for (const char* k : controls)
-        if (!strcmp(s.key, k)) return 2;
-    if (!strcmp(s.key, "!keys")) return 2;
-    if (s.key[0] == '!') return 3; // (DESKTOP SHORTCUTS, HOME MENU ICONS)
-    return 1;
+        if (!strcmp(s.key, k)) return 3;
+    if (!strcmp(s.key, "!keys")) return 3;
+    if (s.key[0] == '!') return 4; // (DESKTOP SHORTCUTS, HOME MENU ICONS)
+    return 2;
 }
 
 struct SettingsPage

@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Builds the iPhone and iPad app, Pokemon DS Widescreen (the same program as the PC download,
+# Builds the iPhone and iPad app, Pokémon Fulldex (the same program as the PC download,
 # frontend/pc_launcher.cpp), on a Mac with Xcode, as an unsigned .ipa for sideloading
 # (AltStore, SideStore, Sideloadly and the like sign it with the player's own Apple ID):
 # build-ios-dist/pokemon-ds-wide-ios.ipa.
@@ -8,11 +8,11 @@
 #
 # TABLES, ART and ICON as for tools/mac/build_all.sh (SoulSilver and HeartGold's tables, made
 # without a ROM here; the game list's pictures; the app's icon). SSR_IOS_TARGET=simulator builds
-# for the iOS Simulator instead (build-ios-dist/Pokemon DS Widescreen.app, for a first-start test:
+# for the iOS Simulator instead (build-ios-dist/Pokemon Fulldex.app, for a first-start test:
 # .github/workflows/ios.yml).
 #
 # The app keeps the ROMs, saves, settings and game.log in its Documents folder, which the Files
-# app shows as On My iPhone > Pokemon DS Widescreen. iOS lets no app make code as it runs, so
+# app shows as On My iPhone > Pokémon Fulldex. iOS lets no app make code as it runs, so
 # melonDS's JIT is left out and its interpreter plays (a recent iPhone is fast enough). The world
 # is drawn by the processor, as on Android. Needs Xcode, CMake (3.21 to 3.x), Ninja, Python 3, git.
 set -euo pipefail
@@ -81,7 +81,7 @@ ninja -C "$BUILD" ssrecomp
 
 say "The app"
 DIST="$HERE/build-ios-dist"
-APP="$DIST/Pokemon DS Widescreen.app"
+APP="$DIST/Pokemon Fulldex.app"
 rm -rf "$DIST"
 mkdir -p "$APP/data"
 # (CMake makes an iOS program a bundle of its own, ssrecomp.app; only the program is taken from it.)
@@ -111,8 +111,8 @@ cat > "$APP/Info.plist" <<PLIST
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0"><dict>
 <key>CFBundleInfoDictionaryVersion</key><string>6.0</string>
-<key>CFBundleName</key><string>Pokemon DS Widescreen</string>
-<key>CFBundleDisplayName</key><string>Pokemon DS</string>
+<key>CFBundleName</key><string>Pokémon Fulldex</string>
+<key>CFBundleDisplayName</key><string>Pokémon Fulldex</string>
 <key>CFBundleIdentifier</key><string>io.github.mamesj.pokemonds</string>
 <key>CFBundleExecutable</key><string>pokemon-ds-wide</string>
 <key>CFBundlePackageType</key><string>APPL</string>
@@ -155,7 +155,7 @@ rm -rf "$DIST/Payload"
 # Only the program, its tables, licence, icons and Info.plist: never a ROM, save or game code.
 python3 - "$IPA" <<'PY'
 import re, sys, zipfile
-ok = re.compile(r'^Payload/(Pokemon DS Widescreen\.app/(pokemon-ds-wide|Info\.plist|LICENSE\.txt|AppIcon[0-9.x@~a-z]+\.png|_CodeSignature/(CodeResources)?|data/|data/funcs/|data/funcs/(IREO|IRDO|IRBO|IRAO|CPUE|IREF|IRDF|CPUF|IRBF|IRAF)\.txt)?)?$')
+ok = re.compile(r'^Payload/(Pokemon Fulldex\.app/(pokemon-ds-wide|Info\.plist|LICENSE\.txt|AppIcon[0-9.x@~a-z]+\.png|_CodeSignature/(CodeResources)?|data/|data/funcs/|data/funcs/(IREO|IRDO|IRBO|IRAO|CPUE|IREF|IRDF|CPUF|IRBF|IRAF)\.txt)?)?$')
 names = zipfile.ZipFile(sys.argv[1]).namelist()
 bad = [n for n in names if not ok.match(n)]
 if bad: sys.exit('unexpected files in the iOS download: %s' % bad)

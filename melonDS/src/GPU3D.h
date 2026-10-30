@@ -295,6 +295,7 @@ public:
     // geometry, on the first of those two frames. Only what is displayed changes.
     bool InterpolationEnabled = false;
     u32 InterpolatedFrames = 0; // statistics
+    u32 InterpSkipped = 0;      // statistics: in-between frames left out (InterpSkipLog)
 
     bool AbortFrame = false;
 
@@ -372,6 +373,7 @@ public:
     std::array<Polygon*,2048> InterpRenderPolygonRAM {};
     u32 InterpNumPolygons = 0;
     void BuildInterpolatedFrame() noexcept;
+    void InterpSkipLog(const char* why, u32 a, u32 b) noexcept;
     u32 RenderNumPolygons = 0;
 
     u32 FlushRequest = 0;

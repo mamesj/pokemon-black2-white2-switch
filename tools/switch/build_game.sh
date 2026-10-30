@@ -171,37 +171,59 @@ all)
     icon="${SSR_SWITCH_ICON_ALL:-${SSR_SWITCH_ICON:-}}"
     rm -f "$BUILD/icon.jpg"
     [ -n "$icon" ] && install -D -m 644 "$icon" "$BUILD/icon.jpg"
+    # GBA games too (SSR_GBA_DIR: Pokemon GBA Widescreen's folder, after its setup.sh): with
+    # devkitPro installed or unpacked (DEVKITPRO), not its Docker image, which sees only this folder.
+    if [ -n "${SSR_GBA_DIR:-}" ]; then
+        [ -f "$SSR_GBA_DIR/frontend/embed.h" ] || fail "SSR_GBA_DIR: not Pokemon GBA Widescreen: $SSR_GBA_DIR"
+        [ -z "$DOCKER" ] || fail "GBA games too (SSR_GBA_DIR) needs devkitPro installed, not its Docker image: set DEVKITPRO (Pokemon GBA Widescreen's tools/switch/build.sh unpacks one)"
+        SSR_GBA_DIR="$(realpath "$SSR_GBA_DIR")"
+        export SSR_GBA_DIR
+        say "GBA games too: $SSR_GBA_DIR"
+    fi
     say "Compiling for the Switch"
     build SSR_SWITCH_JIT=1 SSR_SWITCH_GEN="$HERE/build-gen-tables" SSR_SWITCH_BUILD="$BUILD" \
-        SSR_SWITCH_ROMFS="$ROMFS" SSR_ALL_GAMES=ON SSR_PC_ART="$ART" SSR_NRO_TITLE="Pokemon DS Widescreen" bash tools/switch/build.sh
+        SSR_SWITCH_ROMFS="$ROMFS" SSR_ALL_GAMES=ON SSR_PC_ART="$ART" SSR_NRO_TITLE="Pokémon Fulldex" bash tools/switch/build.sh
     mkdir -p build-sd/switch/pokemon-ds-wide/roms
     cp "$BUILD/ssrecomp.nro" build-sd/switch/pokemon-ds-wide/pokemon-ds-wide.nro
+    # The licences: this program's (GPL-3) and, with the GBA games built in, mGBA's (MPL-2.0).
+    cp LICENSE build-sd/switch/pokemon-ds-wide/LICENSE.txt
+    LICENCES="switch/pokemon-ds-wide/LICENSE.txt"
+    GBA_WORK="${GBAW_WORK:-$HOME/pokemon-gba-wide}"
+    if [ -n "${SSR_GBA_DIR:-}" ]; then
+        [ -f "$GBA_WORK/mgba/LICENSE" ] || fail "no mGBA in $GBA_WORK (Pokemon GBA Widescreen's setup.sh makes it; GBAW_WORK if elsewhere)"
+        cp "$GBA_WORK/mgba/LICENSE" build-sd/switch/pokemon-ds-wide/LICENSE-mGBA.txt
+        LICENCES="$LICENCES switch/pokemon-ds-wide/LICENSE-mGBA.txt"
+    else
+        rm -f build-sd/switch/pokemon-ds-wide/LICENSE-mGBA.txt
+    fi
     ZIP=pokemon-ds-wide-all-switch.zip
     rm -f "build-sd/$ZIP"
-    # The program and an empty roms folder, so that it is plain where the ROMs go.
+    # The program, its licences and an empty roms folder, so that it is plain where the ROMs go.
     (cd build-sd && python3 -c "
 import sys, zipfile
 with zipfile.ZipFile(sys.argv[1], 'w', zipfile.ZIP_DEFLATED) as z:
     z.write('switch/pokemon-ds-wide/pokemon-ds-wide.nro')
+    for f in sys.argv[2:]: z.write(f)
     d = zipfile.ZipInfo('switch/pokemon-ds-wide/roms/')
     d.external_attr = (0o40755 << 16) | 0x10  # a folder, for Unix and Windows unzippers
     z.writestr(d, '')
-" "$ZIP")
-    # (Only the program: no ROM, save, save state or generated code.)
+" "$ZIP" $LICENCES)
+    # (Only the program and its licences: no ROM, save, save state or generated code.)
     python3 -c "
 import sys, zipfile
 names = zipfile.ZipFile(sys.argv[1]).namelist()
-if names != ['switch/pokemon-ds-wide/pokemon-ds-wide.nro', 'switch/pokemon-ds-wide/roms/']: sys.exit('unexpected files in the zip: %s' % names)
+want = ['switch/pokemon-ds-wide/pokemon-ds-wide.nro'] + sys.argv[2:] + ['switch/pokemon-ds-wide/roms/']
+if names != want: sys.exit('unexpected files in the zip: %s' % names)
 print('zip holds:', ', '.join(names))
-" "build-sd/$ZIP"
+" "build-sd/$ZIP" $LICENCES
     say "Done: $HERE/build-sd/$ZIP"
     ls -l build-sd/switch/pokemon-ds-wide "build-sd/$ZIP"
     cat <<EOF
 
 Copy build-sd/switch to the root of the SD card, then your ROMs into /switch/pokemon-ds-wide/roms/ (any
-names; English Black, White, Black 2, White 2; SoulSilver and HeartGold US). Its list also shows
+names; English Black, White, Black 2, White 2; SoulSilver and HeartGold US$([ -n "${SSR_GBA_DIR:-}" ] && printf '; the GBA games, Emerald,\nFireRed, LeafGreen and Ultra Violet, there or in a GBA folder in it')). Its list also shows
 the games in the other folders of /switch (the one-game downloads), each with the save in its folder.
-On the Switch, hold R while starting any game and choose Pokemon DS Widescreen.
+On the Switch, hold R while starting any game and choose Pokémon Fulldex.
 The zip holds only the program, ready to share: nothing of the games.
 EOF
     exit 0

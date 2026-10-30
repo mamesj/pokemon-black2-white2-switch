@@ -1,5 +1,5 @@
 // On-screen controls for touch screens without a controller (Android): a D-pad, the four
-// face buttons, L and R, Start, Select and a menu button, drawn over the picture. Each
+// face buttons, L and R, Start, Select, a menu button and fast forward, drawn over the picture. Each
 // finger is followed on its own, so a direction can be held while a button is pressed.
 // Fingers that start anywhere else touch the game's touch screen (see main.cpp).
 #pragma once
@@ -15,11 +15,11 @@ struct TouchPad
 {
     // What a finger is on. The values of the buttons are the PAD_* controller buttons
     // they act as (by label: the button marked A is A).
-    enum { NONE = -1, DPAD = -2, MENU = -3, SCREEN = -4 };
+    enum { NONE = -1, DPAD = -2, MENU = -3, SCREEN = -4, FAST = -5 };
 
     struct Button
     {
-        int pad;           // PAD_* index, or MENU
+        int pad;           // PAD_* index, MENU or FAST
         float x, y, r;     // centre and radius in output pixels (pills use w/h)
         float w, h;        // non-zero: a rounded rectangle instead of a circle
         const char* label;
@@ -57,6 +57,9 @@ struct TouchPad
             { PAD_BACK, outW / 2.0f - 1.25f * u, outH - 0.55f * u, 0, 2.2f * u, 0.7f * u, "SELECT" },
             { PAD_START, outW / 2.0f + 1.25f * u, outH - 0.55f * u, 0, 2.2f * u, 0.7f * u, "START" },
             { MENU, outW / 2.0f, 0.55f * u, 0, 1.6f * u, 0.7f * u, "MENU" },
+            // Fast forward while held, beside R: the DS's R stays the game's own button, as on
+            // a controller, where fast forward is the right trigger.
+            { FAST, outW - 0.35f * u - 2.6f * u - 0.3f * u - 0.8f * u, 0.3f * u + 0.45f * u, 0, 1.6f * u, 0.9f * u, ">>" },
         };
     }
 
@@ -152,10 +155,18 @@ struct TouchPad
         }
     }
 
+    // A finger on fast forward.
+    bool FastHeld() const
+    {
+        for (auto& f : fingerOn)
+            if (f.second == FAST) return true;
+        return false;
+    }
+
     void MakeLabels(SDL_Renderer* r)
     {
         if (labels) return;
-        const char* names[] = { "A", "B", "X", "Y", "L", "R", "SELECT", "START", "MENU" };
+        const char* names[] = { "A", "B", "X", "Y", "L", "R", "SELECT", "START", "MENU", ">>" };
         const int scale = 3;
         Canvas c;
         int x = 0;
@@ -242,7 +253,7 @@ struct TouchPad
         if (held[PAD_DOWN]) armLit(dpadX - arm, dpadY + arm, dpadX + arm, dpadY + dpadR * 0.92f);
         for (const Button& b : buttons)
         {
-            bool on = b.pad == MENU ? menuHeld : held[b.pad];
+            bool on = b.pad == MENU ? menuHeld : b.pad == FAST ? FastHeld() : held[b.pad];
             if (b.w > 0)
             {
                 Pill(v, b.x, b.y, b.w, b.h, dark);

@@ -87,8 +87,16 @@ target_include_directories(gamecode PRIVATE melonDS/src runtime "${SSR_GENERATED
 target_compile_options(gamecode PRIVATE -O1 -g0 -fno-exceptions -fno-rtti "$<$<COMPILE_LANGUAGE:CXX>:-fno-stack-protector>"
     "$<$<COMPILE_LANGUAGE:ASM>:-Wa,-I${SSR_GENERATED_DIR}>")
 
+# RetroAchievements (frontend/achievements.cpp): RetroAchievements' own rcheevos library, as it
+# comes (frontend/thirdparty/rcheevos, MIT).
+file(GLOB_RECURSE SSR_RCHEEVOS_SOURCES "${CMAKE_CURRENT_SOURCE_DIR}/frontend/thirdparty/rcheevos/src/*.c")
+add_library(rcheevos STATIC ${SSR_RCHEEVOS_SOURCES})
+target_include_directories(rcheevos PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}/frontend/thirdparty/rcheevos/include")
+
 set(SSRECOMP_SOURCES
     frontend/main.cpp
+    frontend/achievements.cpp
+    frontend/achievements_http.cpp
     frontend/platform.cpp
     runtime/recomp_rt.cpp
     runtime/recomp_mem.cpp
@@ -320,7 +328,7 @@ set(SSR_PC_ART "" CACHE PATH "a folder of pictures for the game list, built into
 if((SSR_PC_ALL_GAMES OR SSR_ALL_GAMES) AND SSR_PC_ART AND IS_DIRECTORY "${SSR_PC_ART}")
     set(_art_body "")
     set(_art_table "")
-    foreach(code IRBO IRAO IREO IRDO IPKE IPGE CPUE)
+    foreach(code IRBO IRAO IREO IRDO IPKE IPGE CPUE ECRA)
         foreach(ext jpg png)
             if(EXISTS "${SSR_PC_ART}/${code}.${ext}")
                 set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS "${SSR_PC_ART}/${code}.${ext}")
@@ -346,6 +354,46 @@ if((SSR_PC_ALL_GAMES OR SSR_ALL_GAMES) AND SSR_PC_ART AND IS_DIRECTORY "${SSR_PC
     target_sources(ssrecomp PRIVATE "${CMAKE_CURRENT_BINARY_DIR}/pc_art.cpp")
     target_compile_definitions(ssrecomp PRIVATE SSR_PC_ART)
 endif()
+# GBA games too, in the all-games program: Pokemon GBA Widescreen built in (mGBA with its wide
+# renderer, and the widescreen patches for Emerald, FireRed, LeafGreen and Ultra Violet).
+# SSR_GBA_DIR is that project's folder, after its setup.sh has made what it needs (in
+# ~/pokemon-gba-wide, or GBAW_WORK); the list gets a GBA section and plays them
+# (frontend/gba_games.h, its frontend/embed.h). Empty: DS games only.
+set(SSR_GBA_DIR "" CACHE PATH "Pokemon GBA Widescreen's folder, to play GBA games too")
+if(SSR_GBA_DIR AND (SSR_PC_ALL_GAMES OR SSR_ALL_GAMES))
+    set(GBAW_EMBEDDED ON CACHE BOOL "" FORCE)
+    add_subdirectory("${SSR_GBA_DIR}" gbaw EXCLUDE_FROM_ALL)
+    target_link_libraries(ssrecomp PRIVATE gbawide)
+    target_compile_definitions(ssrecomp PRIVATE SSR_GBA)
+endif()
+# RetroAchievements: the library, and each platform's way to the internet (achievements_http.cpp);
+# the program's version, which the server is told with its name, from CHANGELOG.md's newest release.
+target_link_libraries(ssrecomp PRIVATE rcheevos)
+if(WIN32)
+    target_link_libraries(ssrecomp PRIVATE winhttp)
+elseif(APPLE)
+    # (NSURLSession, from Objective-C++: built as C++ told it is Objective-C++.)
+    target_sources(ssrecomp PRIVATE frontend/achievements_http_apple.mm)
+    set_source_files_properties(frontend/achievements_http_apple.mm PROPERTIES LANGUAGE CXX COMPILE_FLAGS "-x objective-c++")
+    target_link_libraries(ssrecomp PRIVATE "-framework Foundation")
+elseif(SSR_SWITCH)
+    # (devkitPro's libcurl, with its TLS library, from the portlibs.)
+    find_package(PkgConfig REQUIRED)
+    pkg_check_modules(SSR_SWITCH_CURL REQUIRED IMPORTED_TARGET libcurl)
+    target_link_libraries(ssrecomp PRIVATE PkgConfig::SSR_SWITCH_CURL)
+elseif(UNIX AND NOT ANDROID)
+    target_link_libraries(ssrecomp PRIVATE ${CMAKE_DL_LIBS})
+endif()
+set(SSR_RA_VERSION "0.0.0")
+if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/CHANGELOG.md")
+    file(STRINGS "${CMAKE_CURRENT_SOURCE_DIR}/CHANGELOG.md" _ssr_releases REGEX "^## v[0-9]")
+    if(_ssr_releases)
+        list(GET _ssr_releases 0 SSR_RA_VERSION)
+        string(REGEX REPLACE "^## v([0-9.]+).*" "\\1" SSR_RA_VERSION "${SSR_RA_VERSION}")
+    endif()
+endif()
+target_compile_definitions(ssrecomp PRIVATE SSR_RA_VERSION="${SSR_RA_VERSION}")
+
 if(SSR_GPU3D)
     if(WIN32)
         target_sources(ssrecomp PRIVATE frontend/glcontext_wgl.cpp)

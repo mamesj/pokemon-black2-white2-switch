@@ -6,8 +6,8 @@ the world drawn out to the sides of a 16:9 screen, 60 fps and controller support
 It plays your own copies of:
 
   Pokemon Black, White, Black 2 and White 2 (English, US or Europe)
-  Pokemon SoulSilver and HeartGold (US)
-  Pokemon Platinum (US)
+  Pokemon SoulSilver and HeartGold (English, US or Europe)
+  Pokemon Platinum (English, US or Europe)
 
 Nothing of the games comes with this download: you need your own ROMs (.nds files).
 
@@ -17,10 +17,12 @@ GETTING STARTED
 
 1. Unpack the download anywhere you like (not inside Program Files).
 2. Put your ROMs in the roms folder. Any file names are fine.
-3. Start Pokemon DS Launcher.exe (Windows) or pokemon-ds-wide (Linux).
+3. Start Pokemon Fulldex.exe (Windows) or pokemon-ds-wide (Linux).
 4. Pick a game from the list: arrow keys or a controller's D-pad, then Enter or A.
    You can also double-click a game. Press O in the list to open the roms folder, and H (or
    a controller's Y) for the settings: the Esc menu's options, each explained.
+   The list shows every game under its console's heading; the tabs at the top (Q and E, a
+   controller's shoulder buttons, or a click) show one console's games.
 
 Windows may warn that the program is from an unknown publisher the first time: choose
 "More info", then "Run anyway".
@@ -59,7 +61,7 @@ PICTURE SETTINGS (Esc menu)
                      on your desktop (Linux: also in your apps menu), with its picture. It
                      starts that game straight away; QUIT in the pause menu still comes back
                      to the list. The same from a command line:
-                     "Pokemon DS Launcher.exe" --game IREO (the game codes are under icons/).
+                     "Pokemon Fulldex.exe" --game IREO (the game codes are under icons/).
 
 
 WHERE THINGS ARE KEPT

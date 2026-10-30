@@ -45,6 +45,8 @@ struct Probe
     u32 lastFrame;
     u32 next; // next probe at the same address (index + 1), for overlays that share addresses
     u32 chunk; // the chunk the address is in (~0u: none): a function is not always a chunk's start
+    RcHook hook = nullptr; // called on every entry (rc_add_hook), not only once a frame
+    void* hookUser = nullptr;
 };
 std::vector<Probe> probes;
 std::vector<u32> probeHead; // per halfword of main RAM: first probe index + 1
@@ -259,7 +261,13 @@ void WatchHit(void*, u32 addr, bool thumb)
         for (u32 p = probeHead[(addr - kMainBase) >> 1]; p; p = probes[p - 1].next)
         {
             Probe& pr = probes[p - 1];
-            if (pr.lastFrame == rc_frame || pr.chunk == ~0u || (bool)rc_chunks[pr.chunk].thumb != thumb) continue;
+            if (pr.chunk == ~0u || (bool)rc_chunks[pr.chunk].thumb != thumb) continue;
+            if (pr.hook)
+            {
+                if (WatchChunkPresent(pr.chunk)) pr.hook(pr.hookUser, &watchNds->ARM9);
+                continue;
+            }
+            if (pr.lastFrame == rc_frame) continue;
             if (!WatchChunkPresent(pr.chunk)) continue;
             pr.lastFrame = rc_frame;
             rc_section_last_frame[pr.section] = rc_frame;
@@ -416,7 +424,11 @@ bool RecompRun(ARMv5* cpu)
     if (!chunkHasProbe.empty() && chunkHasProbe[id - 1] && addr >= kMainBase && addr < kMainEnd)
     {
         for (u32 p = probeHead[(addr - kMainBase) >> 1]; p; p = probes[p - 1].next)
-            if (probes[p - 1].section == rc_chunks[id - 1].section) probes[p - 1].lastFrame = rc_frame;
+            if (probes[p - 1].section == rc_chunks[id - 1].section)
+            {
+                probes[p - 1].lastFrame = rc_frame;
+                if (probes[p - 1].hook) probes[p - 1].hook(probes[p - 1].hookUser, cpu);
+            }
     }
     rc_chunks[id - 1].fn(cpu, addr);
     return true;
@@ -461,6 +473,17 @@ int rc_add_probe(const char* section, unsigned addr)
     head = (u32)probes.size();
     WatchAddress(addr);
     return (int)probes.size() - 1;
+}
+
+int rc_add_hook(const char* section, unsigned addr, RcHook hook, void* user)
+{
+    const int p = rc_add_probe(section, addr);
+    if (p >= 0)
+    {
+        probes[p].hook = hook;
+        probes[p].hookUser = user;
+    }
+    return p;
 }
 
 unsigned rc_probe_last_frame(int probe)

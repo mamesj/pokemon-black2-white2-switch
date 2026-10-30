@@ -57,7 +57,8 @@ Targets: Linux and Windows first, Android second. macOS is community-maintained.
 | `tools/package_setup.py`, `make_appimage.sh` | packaging the setup program with PyInstaller |
 | `tools/android/` | APK packing around SDL's Java code |
 | `frontend/switch_platform.cpp` | the Switch's parts (SD card folder, clocks, threads, exit); only file that sees libnx |
-| `frontend/launcher.h` | the all-games program's game list (ROMs found, icons and names from their banners), drawn by `switch_platform.cpp` before the game starts |
+| `frontend/launcher.h` | the all-games program's game list (ROMs found, icons and names from their banners; ALL with a heading per console, and a tab for each: DS, GBA, 3DS), drawn by `switch_platform.cpp` and `pc_launcher.cpp` before the game starts |
+| `frontend/gba_games.h` | GBA games in that list (`SSR_GBA_DIR`: Pokemon GBA Widescreen's folder, built in as the library `gbawide`; its `frontend/embed.h` finds and plays them), from the roms folder and a GBA folder in it |
 | `frontend/bw1.h`, `tools/bw1/`, `tools/bw2/` | Pokémon Black, White and Black 2: no recompiled code; layouts follow the functions in `funcs.txt` (made by `funcmap.py` from a decompilation's symbols and the ROM), Black's own layouts on top of Black 2's (White's table is Black's at the addresses in `tools/bw1/white_shifts.txt`) |
 | `melonDS/src/GPU3D_WideGpu*.cpp`, `wide_gpu/` | the widescreen world drawn by a graphics chip: deko3D on the Switch, OpenGL on a PC for headless comparisons (keep both in step with `GPU3D_Wide.cpp`) |
 | `frontend/pc_launcher.cpp`, `tools/pc/` | the PC all-games download (Windows and Linux, `SSR_PC_ALL_GAMES`): the game list (launcher.h) when started without arguments, ROMs in `roms/`, saves in `saves/`, function tables in `data/funcs/`; `tools/pc/build_all.sh` builds and packs it (Windows with MinGW-w64 from Linux or WSL) |

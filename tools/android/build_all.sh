@@ -132,7 +132,7 @@ for abi in $ABIS; do
     # the building machine's AVX2.
     cmake -S . -B "build-android-all-$abi" "${ARGS[@]}" -DSDL2_DIR="$SDL_PREFIX/lib/cmake/SDL2" \
         -DSSR_JIT=ON -DSSR_PC_ALL_GAMES=ON -DSSR_PNG=OFF -DSSR_GPU3D=OFF -DSSR_PORTABLE_X86=ON \
-        -DSSR_GENERATED_DIR="$HERE/build-gen-tables" -DSSR_PC_ART="$ART" >/dev/null
+        -DSSR_GENERATED_DIR="$HERE/build-gen-tables" -DSSR_PC_ART="$ART" -DSSR_GBA_DIR="${SSR_GBA_DIR:-}" >/dev/null
     ninja -C "build-android-all-$abi" ssrecomp
     mkdir -p "build-android-dist/lib/$abi"
     "$STRIP" -o "build-android-dist/lib/$abi/libmain.so" "build-android-all-$abi/libmain.so"
@@ -140,6 +140,13 @@ for abi in $ABIS; do
     FILES+=("lib/$abi/libSDL2.so=build-android-dist/lib/$abi/libSDL2.so" "lib/$abi/libmain.so=build-android-dist/lib/$abi/libmain.so")
 done
 for f in "$FUNCS"/*.txt; do FILES+=("assets/funcs/$(basename "$f")=$f"); done
+# The licences: this program's (GPL-3) and, with the GBA games built in, mGBA's (MPL-2.0).
+FILES+=("assets/LICENSE.txt=$HERE/LICENSE")
+GBA_WORK="${GBAW_WORK:-$HOME/pokemon-gba-wide}"
+if [ -n "${SSR_GBA_DIR:-}" ]; then
+    [ -f "$GBA_WORK/mgba/LICENSE" ] || fail "no mGBA in $GBA_WORK (Pokemon GBA Widescreen's setup.sh makes it; GBAW_WORK if elsewhere)"
+    FILES+=("assets/LICENSE-mGBA.txt=$GBA_WORK/mgba/LICENSE")
+fi
 
 say "The app around it: manifest, icon, SDL's Java code and the app's own"
 W="$HERE/build-android-dist/skeleton"
@@ -210,7 +217,7 @@ PY
 # Only the app's own files may be in it: never a ROM, save or game code.
 python3 - "$APK" <<'PY'
 import re, sys, zipfile
-ok = re.compile(r'^(AndroidManifest\.xml|resources\.arsc|classes\.dex|res/.*\.png|res/mipmap-anydpi-v26/ic_launcher\.xml|lib/(arm64-v8a|x86_64)/lib(main|SDL2)\.so|assets/funcs/(IREO|IRDO|IRBO|IRAO|CPUE|IREF|IRDF|CPUF|IRBF|IRAF)\.txt)$')
+ok = re.compile(r'^(AndroidManifest\.xml|resources\.arsc|classes\.dex|res/.*\.png|res/mipmap-anydpi-v26/ic_launcher\.xml|lib/(arm64-v8a|x86_64)/lib(main|SDL2)\.so|assets/funcs/(IREO|IRDO|IRBO|IRAO|CPUE|IREF|IRDF|CPUF|IRBF|IRAF)\.txt|assets/LICENSE(-mGBA)?\.txt)$')
 bad = [n for n in zipfile.ZipFile(sys.argv[1]).namelist() if not ok.match(n)]
 if bad: sys.exit('unexpected files in the APK: %s' % bad)
 PY

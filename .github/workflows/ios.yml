@@ -55,7 +55,7 @@ jobs:
           print(phones[-1])')
           xcrun simctl boot "$UDID"
           xcrun simctl bootstatus "$UDID" -b
-          xcrun simctl install "$UDID" "build-ios-dist/Pokemon DS Widescreen.app"
+          xcrun simctl install "$UDID" "build-ios-dist/Pokemon Fulldex.app"
           xcrun simctl launch "$UDID" io.github.mamesj.pokemonds
           sleep 25
           mkdir -p sim

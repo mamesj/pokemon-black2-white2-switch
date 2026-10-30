@@ -1,4 +1,4 @@
-# Builds the Mac download (Pokemon DS Widescreen.app, tools/mac/build_all.sh) for Apple silicon
+# Builds the Mac download (Pokemon Fulldex.app, tools/mac/build_all.sh) for Apple silicon
 # and Intel Macs. Started by the maintainer's publish script (or by hand: Actions tab > Mac
 # download > Run workflow); the zips are then the run's artifacts.
 #

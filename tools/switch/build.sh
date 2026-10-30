@@ -65,11 +65,33 @@ if [ -z "$JOBS" ]; then
     [ "$JOBS" -lt 1 ] && JOBS=1
 fi
 
+# devkitPro somewhere other than /opt/devkitpro (unpacked from its Docker image, as Pokemon GBA
+# Widescreen's tools/switch/build.sh does): its pkg-config files still say /opt/devkitpro, so a
+# pkg-config that puts the real folder in front of their paths.
+PKGCONF=()
+if [ "$(realpath -m "$DEVKITPRO")" != /opt/devkitpro ]; then
+    mkdir -p "$BUILD"
+    cat > "$BUILD/pkg-config-switch" <<PKG
+#!/bin/sh
+export PKG_CONFIG_DIR= PKG_CONFIG_PATH= PKG_CONFIG_LIBDIR="$DEVKITPRO/portlibs/switch/lib/pkgconfig"
+export PKG_CONFIG_SYSROOT_DIR="${DEVKITPRO%/opt/devkitpro}"
+exec pkg-config --static "\$@"
+PKG
+    chmod +x "$BUILD/pkg-config-switch"
+    PKGCONF=(-DPKG_CONFIG_EXECUTABLE="$HERE/$BUILD/pkg-config-switch")
+fi
+# A build folder made with devkitPro in another place (in Docker, say) starts again: CMake keeps
+# the compilers it found the first time.
+if [ -f "$BUILD/CMakeCache.txt" ] && ! grep -q "^CMAKE_TOOLCHAIN_FILE:[A-Z]*=$DEVKITPRO/cmake/Switch.cmake\$" "$BUILD/CMakeCache.txt"; then
+    say "devkitPro is somewhere else now: configuring $BUILD from the start"
+    rm -rf "$BUILD/CMakeCache.txt" "$BUILD/CMakeFiles"
+fi
+
 say "Configuring ($BUILD)"
 if [ "$JIT" = 1 ]; then
     # (Configured every time, so that an older build folder picks up new options.)
     [ -f "$GEN/sources.cmake" ] || fail "no generated tables in $GEN"
-    cmake -S . -B "$BUILD" -G Ninja \
+    cmake -S . -B "$BUILD" -G Ninja "${PKGCONF[@]}" \
         -DCMAKE_TOOLCHAIN_FILE="$DEVKITPRO/cmake/Switch.cmake" \
         -DCMAKE_BUILD_TYPE=Release \
         -DSSR_GENERATED_DIR="$GEN" \
@@ -77,9 +99,10 @@ if [ "$JIT" = 1 ]; then
         -DSSR_SWITCH_ROMFS="${SSR_SWITCH_ROMFS:-}" \
         -DSSR_ALL_GAMES="${SSR_ALL_GAMES:-OFF}" \
         -DSSR_PC_ART="${SSR_PC_ART:-}" \
+        -DSSR_GBA_DIR="${SSR_GBA_DIR:-}" \
         -DSSR_JIT=ON
 elif [ ! -f "$BUILD/build.ninja" ]; then
-    cmake -S . -B "$BUILD" -G Ninja \
+    cmake -S . -B "$BUILD" -G Ninja "${PKGCONF[@]}" \
         -DCMAKE_TOOLCHAIN_FILE="$DEVKITPRO/cmake/Switch.cmake" \
         -DCMAKE_BUILD_TYPE=Release \
         -DSSR_GENERATED_DIR="$HERE/gen"

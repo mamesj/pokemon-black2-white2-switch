@@ -1639,10 +1639,20 @@ void GPU3D::BoxTest(const u32* params) noexcept
     // ssrecomp: with the widescreen world on, the test is made against the wide view, so
     // that the game also draws what is only visible beside the DS's own picture. This is
     // the one place where widescreen changes what the game itself sees.
+    //
+    // And against a view a tenth larger every way: the boxes games test are not always
+    // the whole of what is drawn (Black 2's rocks and lamp posts beside the stairs up to
+    // Aspertia City's lookout went out of the picture's bottom edge a few pixels before
+    // they had left it, and the trees and posts at the wide view's sides likewise), so
+    // things vanished, or appeared, while still in sight. What is beyond the view is cut
+    // off by the clipping as ever: it only costs the geometry engine a little more work.
     if (Wide.Owner == this && Wide.ViewWidth > 256)
     {
         for (int i = 0; i < 8; i++)
-            cube[i].Position[0] = (s32)((s64)cube[i].Position[0] * 256 / (s64)Wide.ViewWidth);
+        {
+            cube[i].Position[0] = (s32)((s64)cube[i].Position[0] * 256 * 9 / ((s64)Wide.ViewWidth * 10));
+            cube[i].Position[1] = (s32)((s64)cube[i].Position[1] * 9 / 10);
+        }
     }
 
     // front face (-Z)
@@ -2551,6 +2561,27 @@ void GPU3D::BuildInterpolatedFrame() noexcept
         WideReplay(*this, true, InterpVertexRAM.data(), InterpPolygonRAM.data(), InterpRenderPolygonRAM.data(),
             InterpNumPolygons, matched);
     InterpPending = InterpNumPolygons && matched * 2 >= frameSize;
+    // ssrecomp: why an in-between frame was left out, in game.log (the first 400; and every one
+    // with SSR_INTERP_LOG): too few polygons found in both frames.
+    if (!InterpPending)
+        InterpSkipLog("matched", (u32)matched, (u32)frameSize);
+}
+
+// ssrecomp: one line in game.log per in-between frame left out, saying why (see VBlank and
+// BuildInterpolatedFrame). A frame of 60 left without one shows as a jolt in the motion.
+void GPU3D::InterpSkipLog(const char* why, u32 a, u32 b) noexcept
+{
+    static const bool all = getenv("SSR_INTERP_LOG") != nullptr;
+    static u32 logged = 0;
+    InterpSkipped++;
+    if (!all && logged >= 400) return;
+    logged++;
+    if (!strcmp(why, "matched"))
+        fprintf(stderr, "[60fps] vblank %u: no in-between frame: %u of %u polygons found in the frame before\n", VBlankCount, a, b);
+    else if (!strcmp(why, "gap"))
+        fprintf(stderr, "[60fps] vblank %u: no in-between frame: the game's 3D frame took %u display frames, not 2\n", VBlankCount, a);
+    else
+        fprintf(stderr, "[60fps] vblank %u: no in-between frame: %s\n", VBlankCount, why);
 }
 
 void GPU3D::VBlank() noexcept
@@ -2600,6 +2631,9 @@ void GPU3D::VBlank() noexcept
                 {
                     const bool capturing = (NDS.GPU.GPU2D_A.CaptureCnt & (1u << 31)) != 0;
                     const bool interpolate = InterpolationEnabled && VBlankCount - LastFlushVBlank == 2 && !capturing;
+                    // (A game drawing at 60 frames a second needs none: a gap of 1 is not logged.)
+                    if (InterpolationEnabled && !interpolate && VBlankCount - LastFlushVBlank != 1)
+                        InterpSkipLog(capturing ? "the screen is being captured" : "gap", VBlankCount - LastFlushVBlank, 0);
                     // ssrecomp: the wide view's lists are built on a helper thread where there is
                     // one (WideListsOnHelper), started first so that they are ready by the time
                     // the in-between frame is drawn; they are built with the in-between lists

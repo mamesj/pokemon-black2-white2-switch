@@ -6,6 +6,88 @@
   and Platinum, with separate French saves and regional widescreen map profiles.
 - Platinum: controller answers work with the French introduction's OUI/NON buttons.
 
+- **RetroAchievements: an ACHIEVEMENTS list** in the pause menu (RETROACHIEVEMENTS > ACHIEVEMENTS,
+  once a game's set is loaded): every achievement with its points or DONE, unlocked ones first;
+  the chosen one's description, points and progress so far under the box. A on one opens its
+  details: the whole title and description, points, when you unlocked it (or progress so far) and
+  the share of players who have it.
+- **RetroAchievements from the game list too** (PC, Android, Mac, iPhone and iPad): SETTINGS >
+  RETROACHIEVEMENTS turns it on and LOGS IN (or out) before you start a game; the games use the
+  same account. The pause menu's RETROACHIEVEMENTS is still there.
+- **The game list's own look: GAME LIST on its settings page.** COLOUR changes its lines, the frame
+  round the chosen game and the tabs (red, blue, green, purple, gold, pink or teal), and the pause
+  menu's colours in the games too (BLUE is the pause menu as it was). BACKGROUND:
+  YOUR PICTURE shows a picture of yours behind the games, darkened so the names stay readable: name
+  it `background.jpg` or `background.png` and put it beside your `saves` folder (on the Switch, in
+  `/switch/pokemon-ds-wide/` with the saves). Best at 1920 x 1080; any size fills the screen.
+- **The game list's title reads POKÉMON FULLDEX**, with its É.
+- **A new name: Pokémon Fulldex**, now that it plays GBA games as well as DS ones. The app, the
+  Switch's Homebrew Menu, the phone icons and the PC's window all show it; on Windows the program
+  is `Pokemon Fulldex.exe` (DESKTOP SHORTCUTS: CREATE again for shortcuts to it). Nothing moves:
+  the ROMs, saves, settings and the downloads' file names are where and what they were.
+- **SOUND, with VOLUME**, a page of its own in the pause menu and on the game list's settings
+  page: a slider from OFF, then 10% to 100% (left and right change it, or tap the bar on a
+  phone).
+- **RetroAchievements on every platform:** RETROACHIEVEMENTS in the pause menu (Windows, Linux,
+  Mac, Android, iPhone and iPad, Switch). Turn it on, LOG IN with your RetroAchievements account,
+  and unlocks pop up as you play. Casual mode: save states, fast forward and cheats still work
+  (achievements are paused while a cheat or OTHER VERSION POKEMON is on).
+- **The game list opens on ALL, with a heading for each console (DS, GBA, 3DS)**, and tabs along
+  the top to show one console's games: L and R on the Switch, Q and E (or a controller's shoulder
+  buttons) on a PC, or a tap on the tab on a phone. The 3DS tab has Pokémon Omega Ruby, COMING SOON.
+  On a phone the list scrolls with a finger (on a PC, with the mouse held down too).
+- **GBA games: Pokémon Emerald, FireRed, LeafGreen and Ultra Violet** in the same list, in
+  widescreen at 60 fps (Pokémon GBA Widescreen, built in). Put the ROMs in the same `roms` folder
+  (FireRed and LeafGreen version 1.0 or 1.1; Ultra Violet's `.gba`, or its `.ips` with a FireRed
+  1.0 ROM beside it); their saves go with the others (`emerald.sav` ...). A `GBA` folder inside
+  `roms` works too, with the saves in its own `saves` folder (as Pokémon GBA Widescreen keeps them
+  on a phone, so a game carries on). Other GBA games play
+  too, without widescreen. QUIT GAME in a GBA game's pause menu comes back to the list.
+- **Android: a fast forward button on the touch controls.** Hold the >> button beside R at the top
+  of the screen (up to 4x). R itself stays the DS's R button; with a controller, fast forward is
+  still its right trigger.
+- **Windows: the taskbar shows the program's own icon.** A desktop shortcut to one game that was
+  pinned (Platinum's, say) took over every window of the program, the game list's included, with
+  that game's picture; the program and each game's shortcut now have their own place on the
+  taskbar (SETTINGS, SHORTCUTS, DESKTOP SHORTCUTS: CREATE again updates ones made before).
+- **No version exclusives (OTHER VERSION POKEMON in the pause menu): SoulSilver, HeartGold,
+  Black, White, Black 2 and White 2.** Where the two versions' wild Pokémon differ, each encounter
+  can be either version's, as often as each other, at that place's own rates and levels (Gothita
+  or Solosis, Cottonee or Petilil, Vullaby or Rufflet, Phanpy or Teddiursa...). Legendary Pokémon
+  stay with their own version. Off to start; RetroAchievements are paused while it is on.
+- **SoulSilver, HeartGold and Platinum: the European English copies** are listed as working: their
+  code is the US versions' (only a picture and the version number differ), and they play the
+  same, with the one-screen layouts and the widescreen world.
+- **Black 2: the sky from Aspertia City's lookout** reaches both edges of the wide view: the haze
+  over the sky and mountains no longer stops short on the right (a darker block in the top right
+  corner, and the mountains beyond it in other colours), and the sky's left panel no longer leaves
+  a paler wedge in the top left corner.
+- **Black 2: no flicker at the edges as the camera rises at Aspertia City's lookout.** The sky,
+  hills and mountains were continued to the wide view's edges in some frames and not others while
+  the view tilted up. A wedge of grass that flashed over the cliff at the top right, for a frame,
+  is gone too: the far hillside was stretched past where it really ends. Below the lookout, the
+  fence round the planter by the street no longer runs on across the street as a long rail, and
+  the paving beside it has no jagged step. Walking up the stairs, the cliff on the right no longer
+  flickers as a stretched slab and the tree beside it no longer smears sideways: near things
+  seen from above are no longer taken for the distance.
+- **Black, White, Black 2 and White 2: no flicker at the sides of the wide view as you walk.** On
+  the stairs up to Aspertia City's lookout the ground, a tree and the wall on the right flickered:
+  near things were stretched out to the view's edge in some frames and not others. Only the
+  distance (sky, clouds, haze, mountains) is now continued to the edges, and what continues it
+  changes only once it has held for a few frames. From the lookout, the mountains on the left no
+  longer stretch as you walk from side to side (their picture repeats on instead), and the white
+  mountain on the right no longer stops in a slanted cut with the sky beyond it.
+- **Switch: the game list's settings no longer seem to freeze.** Y opened the settings page, but
+  the game list was drawn over it, so the buttons went to a page you could not see. The list also
+  has a SETTINGS button at the top right, as on a PC or a phone: tap it in handheld mode, or press
+  up from the tabs and then A; < BACK at the top left of the settings goes back.
+- **Game list: the tabs with the D-pad or arrow keys.** Up from the top row of games chooses the
+  tabs (ALL, DS, GBA, 3DS); left and right then change the tab, down goes back into its games, and
+  up again chooses SETTINGS. L and R (Q and E on a keyboard) still change the tab from anywhere.
+- **Widescreen: things no longer vanish while still on screen.** Black 2's rocks and lamp posts at
+  the bottom of the stairs up to Aspertia City's lookout disappeared a few pixels before they had
+  scrolled out of the picture, and appeared late; the game now draws what is near the picture's
+  edges too (all the games, with the wide view on).
 - **New: iPhone and iPad.** A sideloaded app (`pokemon-ds-wide-ios.ipa`, iOS 14 or newer): the
   same game list and games as on Android, with the ROMs, saves and settings in the Files app
   (On My iPhone > Pokemon DS Widescreen).

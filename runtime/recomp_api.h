@@ -32,6 +32,14 @@ unsigned rc_probe_last_frame(int probe);
 // Current value of the runtime's frame counter, for comparing with rc_probe_last_frame.
 unsigned rc_current_frame();
 
+// A hook: a probe that calls `hook` every time the function is entered, before its first
+// instruction runs, with the ARM9 (its arguments in R[0] to R[3], which the hook may change).
+// On the recompiled code, only where the function is entered through the dispatcher (a call
+// from another chunk), as probes.
+namespace melonDS { class ARMv5; }
+typedef void (*RcHook)(void* user, melonDS::ARMv5* cpu);
+int rc_add_hook(const char* section, unsigned addr, RcHook hook, void* user);
+
 // Without the recompiled code (melonDS's interpreter or JIT: --interp, --jit), the same probes
 // and the overlays' activity (rc_section_last_frame, rc_ran_recently) come from the core's
 // watch on chosen addresses (melonDS/src/SsrWatch.h) instead of from the dispatch into

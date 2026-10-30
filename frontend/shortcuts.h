@@ -21,6 +21,8 @@
 #include <shlobj.h>
 #include <shobjidl.h>
 #include <knownfolders.h>
+#include <propidl.h>
+#include <propsys.h>
 #else
 #include <cstdlib>
 #include <unistd.h>
@@ -129,6 +131,7 @@ inline bool WriteFile(const std::string& path, const std::vector<uint8_t>& data)
 inline std::string Title(const Launcher::Game& g)
 {
     if (const Launcher::KnownGame* k = Launcher::Known(g.code)) return k->name;
+    if (g.platform != Launcher::DS && !g.name.empty()) return Launcher::TitleCase(g.name); // (a GBA game)
     return "Pokemon DS " + g.code;
 }
 
@@ -175,6 +178,26 @@ inline std::vector<uint8_t> Ico(const Launcher::Game& g)
 }
 #endif
 
+#ifdef _WIN32
+// The taskbar's names for the program (the game list, and a game started from it) and for each
+// game started from its desktop shortcut. Windows groups the windows on the taskbar, and shows
+// their icon, by these: without them every window of the program counted as any shortcut to it
+// that was pinned (Platinum's, say), and showed that game's picture.
+inline std::wstring AppId(const std::string& code)
+{
+    return code.empty() ? L"mamesj.PokemonDSWide" : L"mamesj.PokemonDSWide." + std::wstring(code.begin(), code.end());
+}
+
+// This process's taskbar name: before any window is made.
+inline void SetAppId(const std::string& code)
+{
+    typedef HRESULT(WINAPI * SetId)(PCWSTR);
+    if (HMODULE shell = GetModuleHandleW(L"shell32.dll"))
+        if (auto set = (SetId)(void*)GetProcAddress(shell, "SetCurrentProcessExplicitAppUserModelID"))
+            set(AppId(code).c_str());
+}
+#endif
+
 // Makes the shortcuts: one per game (once each, the first of any in several folders). dir is
 // the program's folder (for the icons). Returns how many were made; where says where they went,
 // or what failed.
@@ -209,10 +232,29 @@ inline int Make(const std::string& dir, const std::vector<Launcher::Game>& games
         link->SetPath(exe);
         link->SetArguments((L"--game " + Wide(g.code)).c_str());
         link->SetWorkingDirectory(Wide(dir).c_str());
-        link->SetDescription(Wide(Title(g) + " (Pokemon DS Widescreen)").c_str());
+        link->SetDescription(Wide(Title(g) + " (Pokémon Fulldex)").c_str());
         const std::vector<uint8_t> ico = Ico(g);
         const std::string icoPath = iconDir + "/" + g.code + ".ico";
         if (!ico.empty() && WriteFile(icoPath, ico)) link->SetIconLocation(Wide(icoPath).c_str(), 0);
+        // (The game's own taskbar name, as the program takes when started with --game: SetAppId.)
+        IPropertyStore* props = nullptr;
+        if (SUCCEEDED(link->QueryInterface(IID_IPropertyStore, (void**)&props)))
+        {
+            // PKEY_AppUserModel_ID
+            static const PROPERTYKEY key = { { 0x9F4C2855, 0x9F79, 0x4B39, { 0xA8, 0xD0, 0xE1, 0xD4, 0x2D, 0xE1, 0xD5, 0xF3 } }, 5 };
+            const std::wstring id = AppId(g.code);
+            PROPVARIANT v;
+            PropVariantInit(&v);
+            v.vt = VT_LPWSTR;
+            v.pwszVal = (LPWSTR)CoTaskMemAlloc((id.size() + 1) * sizeof(wchar_t));
+            if (v.pwszVal)
+            {
+                memcpy(v.pwszVal, id.c_str(), (id.size() + 1) * sizeof(wchar_t));
+                if (SUCCEEDED(props->SetValue(key, v))) props->Commit();
+            }
+            PropVariantClear(&v);
+            props->Release();
+        }
         IPersistFile* file = nullptr;
         if (SUCCEEDED(link->QueryInterface(IID_IPersistFile, (void**)&file)))
         {
@@ -288,7 +330,7 @@ inline int Make(const std::string& dir, const std::vector<Launcher::Game>& games
         std::string lower = g.code;
         for (char& c : lower) c = (char)tolower((unsigned char)c);
         const std::string entry = "[Desktop Entry]\nType=Application\nName=" + Title(g) +
-            "\nComment=Pokemon DS Widescreen\nExec=" + quoted + " --game " + g.code +
+            "\nComment=Pokémon Fulldex\nExec=" + quoted + " --game " + g.code +
             "\nPath=" + dir + "\n" + (icon ? "Icon=" + png + "\n" : "") + "Terminal=false\nCategories=Game;\n";
         const std::string file = "pokemon-ds-wide-" + lower + ".desktop";
         bool ok = WriteFile(apps + "/" + file, std::vector<uint8_t>(entry.begin(), entry.end()));
