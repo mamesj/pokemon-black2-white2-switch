@@ -520,8 +520,9 @@ inline std::vector<Setting> SettingsList()
                   "PAUSE MENU: START ON A CONTROLLER (MENU ON XBOX / OPTIONS ON PS) OPENS THE PAUSE MENU WHILE PLAYING. DS START: IT IS THE DS START BUTTON (THE GAMES HARDLY USE IT). ENTER IS ALWAYS THE DS START." });
 #endif
 #ifndef __SWITCH__
-    l.push_back({ "buttons", "BUTTONS", { { "labels", "BY LABEL" }, { "positions", "BY POSITION" } }, "labels",
-                  "BY LABEL: THE BUTTON MARKED A IS THE DS A ON ANY CONTROLLER. BY POSITION: THE BUTTONS WHERE A DS HAS THEM (XBOX A IS DS B)." });
+    l.push_back({ "buttons", "SWAP A/B AND X/Y", { { "labels", "OFF" }, { "positions", "ON" } }, "labels",
+                  "OFF: THE BUTTON MARKED A IS THE DS A ON ANY CONTROLLER. ON: FOR XBOX-STYLE CONTROLLERS (BACKBONE OR XBOX): "
+                  "THE RIGHT BUTTON IS THE DS A AND THE BOTTOM ONE THE DS B. AS ON A DS." });
 #ifndef SSR_PHONE
     l.push_back({ "pad_touch", "STICK TOUCH CURSOR", onOff, "0", "ON: THE RIGHT STICK MOVES A CURSOR ON THE TOUCH SCREEN AND THE LEFT TRIGGER PRESSES IT." });
     // (frontend/shortcuts.h, made by the game list: pc_launcher.cpp. Not on a Mac: its Dock and

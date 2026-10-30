@@ -14,7 +14,10 @@ FetchContent_Declare(ssr_sdl2
     URL https://www.libsdl.org/release/SDL2-2.32.10.tar.gz
     TIMEOUT 90
     TLS_VERIFY TRUE
-    URL_HASH SHA256=5f5993c530f084535c65a6879e9b26ad441169b3e25d789d83287040a9ca5165)
+    URL_HASH SHA256=5f5993c530f084535c65a6879e9b26ad441169b3e25d789d83287040a9ca5165
+    # (iOS: the window in a UIScene, so the app fills the whole display, a foldable iPhone's
+    # folded-out one too: cmake/sdl2-uiscene.patch, with the scene manifest in tools/ios/build_all.sh.)
+    PATCH_COMMAND patch -p1 -N -i "${CMAKE_CURRENT_LIST_DIR}/sdl2-uiscene.patch")
 FetchContent_MakeAvailable(ssr_sdl2)
 
 # (iOS, tools/ios/build_all.sh: SDL2 only. libpng is for the test harness's screenshots.)

@@ -4021,7 +4021,7 @@ int main(int argc, char** argv)
             add(M_STARTBTN, "START BUTTON", cfg.startMenu ? "PAUSE MENU" : "DS START");
 #ifndef __SWITCH__
             // (Nothing to choose on the Switch: its labels are the DS's positions.)
-            add(M_BUTTONS, "BUTTONS", cfg.byLabel ? "BY LABEL" : "BY POSITION");
+            add(M_BUTTONS, "SWAP A/B AND X/Y", cfg.byLabel ? "OFF" : "ON"); // (the settings file's buttons=labels / positions)
 #endif
 #if !defined(__SWITCH__) && !defined(SSR_PHONE)
             add(M_PADTOUCH, "STICK TOUCH CURSOR", onOff(cfg.padTouch)); // (the Switch and phones have touch screens)

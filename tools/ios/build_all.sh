@@ -124,6 +124,7 @@ cat > "$APP/Info.plist" <<PLIST
 <key>UISupportedInterfaceOrientations</key><array><string>UIInterfaceOrientationLandscapeLeft</string><string>UIInterfaceOrientationLandscapeRight</string></array>
 <key>UISupportedInterfaceOrientations~ipad</key><array><string>UIInterfaceOrientationLandscapeLeft</string><string>UIInterfaceOrientationLandscapeRight</string></array>
 <key>UIRequiresFullScreen</key><true/>
+<key>UIApplicationSceneManifest</key><dict><key>UIApplicationSupportsMultipleScenes</key><false/><key>UISceneConfigurations</key><dict><key>UIWindowSceneSessionRoleApplication</key><array><dict><key>UISceneConfigurationName</key><string>Default</string><key>UISceneDelegateClassName</key><string>SDLUIKitSceneDelegate</string></dict></array></dict></dict>
 <key>UIStatusBarHidden</key><true/>
 <key>UIViewControllerBasedStatusBarAppearance</key><false/>
 <key>UILaunchScreen</key><dict/>

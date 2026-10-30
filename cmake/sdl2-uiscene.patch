@@ -1,0 +1,127 @@
+diff -ru SDL2-2.32.10/src/video/uikit/SDL_uikitappdelegate.m ../b/SDL2-2.32.10/src/video/uikit/SDL_uikitappdelegate.m
+--- a/src/video/uikit/SDL_uikitappdelegate.m	2025-01-01 10:47:53
++++ b/src/video/uikit/SDL_uikitappdelegate.m	2026-10-29 22:12:55
+@@ -45,6 +45,13 @@
+ #undef main
+ #endif
+ 
++/* The app's window scene (UIApplicationSceneManifest in Info.plist): an app that takes part in
++ * the scene life cycle fills the whole display it is on, the folded-out one of a foldable
++ * iPhone too, instead of a compatibility box; the SDL window is attached to it
++ * (SDL_uikitwindow.m). (UIKit still posts the application notifications SDL_uikitevents.m
++ * follows, so only opened URLs need handing on.) */
++UIWindowScene *SDL_uikit_window_scene API_AVAILABLE(ios(13.0)) = nil;
++
+ static SDL_main_func forward_main;
+ static int forward_argc;
+ static char **forward_argv;
+@@ -346,6 +353,35 @@
+     return UIInterfaceOrientationMaskAll;
+ }
+ #endif /* !TARGET_OS_TV */
++
++@end
++
++API_AVAILABLE(ios(13.0))
++@interface SDLUIKitSceneDelegate : UIResponder <UIWindowSceneDelegate>
++@end
++
++@implementation SDLUIKitSceneDelegate
++
++- (void)scene:(UIScene *)scene willConnectToSession:(UISceneSession *)session options:(UISceneConnectionOptions *)connectionOptions
++{
++    if ([scene isKindOfClass:[UIWindowScene class]]) {
++        SDL_uikit_window_scene = (UIWindowScene *)scene;
++    }
++}
++
++- (void)sceneDidDisconnect:(UIScene *)scene
++{
++    if (scene == SDL_uikit_window_scene) {
++        SDL_uikit_window_scene = nil;
++    }
++}
++
++- (void)scene:(UIScene *)scene openURLContexts:(NSSet<UIOpenURLContext *> *)URLContexts
++{
++    for (UIOpenURLContext *context in URLContexts) {
++        [(id)[UIApplication sharedApplication].delegate application:[UIApplication sharedApplication] openURL:context.URL options:@{}];
++    }
++}
+ 
+ @end
+ 
+diff -ru SDL2-2.32.10/src/video/uikit/SDL_uikitwindow.m ../b/SDL2-2.32.10/src/video/uikit/SDL_uikitwindow.m
+--- a/src/video/uikit/SDL_uikitwindow.m	2025-01-01 10:47:53
++++ b/src/video/uikit/SDL_uikitwindow.m	2026-10-29 22:21:15
+@@ -35,6 +35,8 @@
+ #include "SDL_uikitevents.h"
+ #include "SDL_uikitmodes.h"
+ #include "SDL_uikitwindow.h"
++
++extern UIWindowScene *SDL_uikit_window_scene API_AVAILABLE(ios(13.0));
+ #import "SDL_uikitappdelegate.h"
+ 
+ #import "SDL_uikitview.h"
+@@ -103,6 +105,7 @@
+ 
+     data.uiwindow = uiwindow;
+ 
++
+     /* only one window on iOS, always shown */
+     window->flags &= ~SDL_WINDOW_HIDDEN;
+ 
+@@ -207,11 +210,29 @@
+ 
+         /* ignore the size user requested, and make a fullscreen window */
+         /* !!! FIXME: can we have a smaller view? */
+-        uiwindow = [[SDL_uikitwindow alloc] initWithFrame:data.uiscreen.bounds];
++        uiwindow = nil;
++        if (@available(iOS 13.0, *)) {
++            /* In the scene life cycle (UIApplicationSceneManifest), the window belongs to the
++             * app's scene, which sizes it to the display it is on (and resizes it when a
++             * foldable is folded out); the scene connects just after the app starts. */
++            if ([[NSBundle mainBundle] objectForInfoDictionaryKey:@"UIApplicationSceneManifest"] &&
++                data.uiscreen == [UIScreen mainScreen]) {
++                NSDate *limit = [NSDate dateWithTimeIntervalSinceNow:5.0];
++                while (SDL_uikit_window_scene == nil && [limit timeIntervalSinceNow] > 0) {
++                    [[NSRunLoop currentRunLoop] runMode:NSDefaultRunLoopMode beforeDate:[NSDate dateWithTimeIntervalSinceNow:0.01]];
++                }
++                if (SDL_uikit_window_scene != nil) {
++                    uiwindow = [[SDL_uikitwindow alloc] initWithWindowScene:SDL_uikit_window_scene];
++                }
++            }
++        }
++        if (uiwindow == nil) {
++            uiwindow = [[SDL_uikitwindow alloc] initWithFrame:data.uiscreen.bounds];
+ 
+-        /* put the window on an external display if appropriate. */
+-        if (data.uiscreen != [UIScreen mainScreen]) {
+-            [uiwindow setScreen:data.uiscreen];
++            /* put the window on an external display if appropriate. */
++            if (data.uiscreen != [UIScreen mainScreen]) {
++                [uiwindow setScreen:data.uiscreen];
++            }
+         }
+ 
+         if (SetupWindowData(_this, window, uiwindow, SDL_TRUE) < 0) {
+@@ -238,10 +259,18 @@
+         SDL_WindowData *data = (__bridge SDL_WindowData *) window->driverdata;
+         [data.uiwindow makeKeyAndVisible];
+ 
++        BOOL inScene = NO;
++
+         /* Make this window the current mouse focus for touch input */
+         display = SDL_GetDisplayForWindow(window);
+         displaydata = (__bridge SDL_DisplayData *) display->driverdata;
+-        if (displaydata.uiscreen == [UIScreen mainScreen]) {
++        /* (A window in the app's scene is the app's own, whichever display SDL finds for it: on a
++         * foldable iPhone's folded-out display that is not the main screen, and without the
++         * focus SDL drops every game controller event.) */
++        if (@available(iOS 13.0, *)) {
++            inScene = data.uiwindow.windowScene != nil && data.uiwindow.windowScene == SDL_uikit_window_scene;
++        }
++        if (inScene || displaydata.uiscreen == [UIScreen mainScreen]) {
+             SDL_SetMouseFocus(window);
+             SDL_SetKeyboardFocus(window);
+         }

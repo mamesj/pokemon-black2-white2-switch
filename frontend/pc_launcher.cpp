@@ -1161,6 +1161,13 @@ void ChangeGame() { g_change = true; }
 
 void Finish()
 {
+#ifdef SSR_IOS
+    // (iOS starts no program again: one started by execl gets no scene from the system and
+    // stays a black screen, and once main returns SDL leaves the app open with nothing in it.
+    // Everything is saved by now, so the app closes; opened again it shows the list.)
+    fflush(stderr);
+    exit(0);
+#endif
     if (!g_change) return;
     fflush(stderr);
     // The program again, without arguments: the list.
