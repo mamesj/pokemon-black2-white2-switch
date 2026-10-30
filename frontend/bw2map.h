@@ -79,8 +79,12 @@ private:
         static const Version versions[] = {
             { "IREO", 0x021ca01c, 0x0208ee68, 0x1a3e00, 29 }, // Black 2
             { "IRDO", 0x021ca050, 0x0208ee94, 0x1a3e00, 29 }, // White 2
+            { "IREF", 0x021ca058, 0x0208ee78, 0x1a3e00, 29 }, // Black 2 FR
+            { "IRDF", 0x021ca06c, 0x0208eea4, 0x1a3e00, 29 }, // White 2 FR
             { "IRBO", 0x021d3700, 0x0209d8b0, 0x199500, 21 }, // Black
             { "IRAO", 0x021d3718, 0x0209d8c8, 0x199500, 21 }, // White
+            { "IRBF", 0x021d3678, 0x0209d830, 0x199500, 21 }, // Black FR
+            { "IRAF", 0x021d3690, 0x0209d848, 0x199500, 21 }, // White FR
         };
         for (const Version& v : versions)
             if (!strcmp(code, v.code)) return &v;

@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+- French revision 0 ROMs of Black, White, Black 2, White 2, SoulSilver, HeartGold
+  and Platinum, with separate French saves and regional widescreen map profiles.
+- Platinum: controller answers work with the French introduction's OUI/NON buttons.
+
 - **New: iPhone and iPad.** A sideloaded app (`pokemon-ds-wide-ios.ipa`, iOS 14 or newer): the
   same game list and games as on Android, with the ROMs, saves and settings in the Files app
   (On My iPhone > Pokemon DS Widescreen).

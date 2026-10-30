@@ -58,7 +58,7 @@ public:
             if (fseek(f, 0x0C, SEEK_SET) != 0 || fread(code, 1, 4, f) != 4) code[0] = 0;
             fclose(f);
         }
-        on = !strcmp(code, "IRBO") || !strcmp(code, "IRAO");
+        on = !strcmp(code, "IRBO") || !strcmp(code, "IRAO") || !strcmp(code, "IRBF") || !strcmp(code, "IRAF");
         if (!on) return;
         Fw = &fw;
         auto find = [&](const char* name) {

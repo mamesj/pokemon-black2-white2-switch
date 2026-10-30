@@ -216,7 +216,7 @@ void SetRomFolder(Folders& fo)
 // the emulator, which reads them by file name.
 void ExtractFuncs(const Folders& fo)
 {
-    for (const char* code : { "IREO", "IRDO", "IRBO", "IRAO", "CPUE" })
+    for (const char* code : { "IREO", "IRDO", "IRBO", "IRAO", "CPUE", "IREF", "IRDF", "CPUF", "IRBF", "IRAF" })
     {
         SDL_RWops* rw = SDL_RWFromFile((std::string("funcs/") + code + ".txt").c_str(), "rb");
         if (!rw) continue;
@@ -242,7 +242,7 @@ void ExtractFuncs(const Folders& fo)
 bool Playable(const Folders& fo, const Launcher::Game& g)
 {
     if (!g.known) return false;
-    if (g.code == "IPGE" || g.code == "IPKE") return rc_num_chunks > 0;
+    if (g.code == "IPGE" || g.code == "IPKE" || g.code == "IPGF" || g.code == "IPKF") return rc_num_chunks > 0;
     return Exists(fo.funcs + "/" + g.code + ".txt");
 }
 
@@ -962,22 +962,22 @@ int PickGame(Folders& fo, std::vector<Launcher::Game>& games, int selected, bool
                                     asking ? "TAP ANYWHERE: ALLOW ACCESS TO FILES, THEN PICK THE FOLDER" : "NO .NDS FILES IN",
                                     asking ? "WITH YOUR .NDS FILES. SAVES GO IN A SAVES FOLDER INSIDE IT." : fo.roms.c_str(),
                                     "",
-                                    "IT PLAYS POKEMON BLACK / WHITE / BLACK 2 / WHITE 2 (ENGLISH)",
-                                    "SOULSILVER / HEARTGOLD / PLATINUM (US)" };
+                                    "IT PLAYS POKEMON BLACK / WHITE / BLACK 2 / WHITE 2,",
+                                    "SOULSILVER / HEARTGOLD / PLATINUM (ENGLISH OR FRENCH)" };
             const char* heading = lines[0];
 #elif defined(SSR_IOS)
             const char* lines[] = { "NO GAMES FOUND", "",
                                     "PUT YOUR .NDS FILES IN THE FILES APP: ON MY IPHONE (OR IPAD)",
                                     "> POKEMON DS WIDESCREEN > ROMS. TAP FOLDER AT THE TOP TO GO THERE.",
                                     "THEY SHOW UP HERE BY THEMSELVES.", "",
-                                    "IT PLAYS POKEMON BLACK / WHITE / BLACK 2 / WHITE 2 (ENGLISH)",
-                                    "SOULSILVER / HEARTGOLD / PLATINUM (US)" };
+                                    "IT PLAYS POKEMON BLACK / WHITE / BLACK 2 / WHITE 2,",
+                                    "SOULSILVER / HEARTGOLD / PLATINUM (ENGLISH OR FRENCH)" };
             const char* heading = lines[0];
 #else
             const char* lines[] = { "NO GAMES FOUND", "",
                                     "PUT YOUR ROMS IN THE ROMS FOLDER BESIDE THIS PROGRAM.", "THEY SHOW UP HERE BY THEMSELVES.", "",
-                                    "IT PLAYS POKEMON BLACK / WHITE / BLACK 2 / WHITE 2 (ENGLISH)",
-                                    "SOULSILVER / HEARTGOLD / PLATINUM (US)" };
+                                    "IT PLAYS POKEMON BLACK / WHITE / BLACK 2 / WHITE 2,",
+                                    "SOULSILVER / HEARTGOLD / PLATINUM (ENGLISH OR FRENCH)" };
             const char* heading = lines[0];
 #endif
             int y = canvas.h / 3;
@@ -1143,7 +1143,7 @@ bool Start(int& argc, char**& argv)
 #endif
     // SoulSilver and HeartGold take their layouts from the program's own tables and must not be
     // given a function table (one switches to the Black games' layouts); the others take theirs.
-    if (game.code != "IPGE" && game.code != "IPKE")
+    if (game.code != "IPGE" && game.code != "IPKE" && game.code != "IPGF" && game.code != "IPKF")
     {
         g_args.push_back("--funcs");
         g_args.push_back(fo.funcs + "/" + game.code + ".txt");

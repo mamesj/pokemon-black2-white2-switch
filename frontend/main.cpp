@@ -83,6 +83,12 @@
 #include "SsrProf.h"
 #include "switch_platform.h"
 #include "funcwatch.h"
+#if __has_include("portable_images.h")
+#include "portable_images.h"
+#else
+static unsigned PortableOverlayBase(int) { return 0; }
+static unsigned PortableOverlaySize(int) { return 0; }
+#endif
 #include "bw1.h" // Pokemon Black and White's own layouts
 #include "bw2map.h" // Black 2 and White 2: more of the map loaded beside the player
 #if defined(__SWITCH__) && defined(SSR_DEKO3D)
@@ -1569,7 +1575,7 @@ int main(int argc, char** argv)
     FuncWatch::RomPath = opt.rom; // (for a function table that reads its first bytes from it)
     // Pokemon SoulSilver (US): its new game's first menu is skipped (see where keys are sent).
     // (HeartGold too: the same game where it matters here.)
-    const bool soulSilverRom = rom.size() > 0x10 && (memcmp(&rom[0x0C], "IPGE", 4) == 0 || memcmp(&rom[0x0C], "IPKE", 4) == 0);
+    const bool soulSilverRom = rom.size() > 0x10 && (memcmp(&rom[0x0C], "IPGE", 4) == 0 || memcmp(&rom[0x0C], "IPKE", 4) == 0 || memcmp(&rom[0x0C], "IPGF", 4) == 0 || memcmp(&rom[0x0C], "IPKF", 4) == 0);
     if (rom.empty())
     {
         fprintf(stderr, "cannot read ROM: %s\n", opt.rom.c_str());
@@ -1634,20 +1640,37 @@ int main(int argc, char** argv)
     // code it compares is read from this ROM first, which tells SoulSilver from HeartGold too.
     if (!nds->ARM9.RecompEnable && !funcWatchOn && rc_num_chunks && rc_portable_needed())
     {
-        NdsOverlays overlays;
+        struct PortableRom {
+            NdsOverlays overlays;
+            std::map<int, std::vector<unsigned char>> images;
+            const unsigned char* Read(int id, unsigned* size) {
+                const auto* ov = overlays.Get((uint32_t)id);
+                if (!ov) return nullptr;
+                const unsigned base = PortableOverlayBase(id);
+                if (!base) {
+                    *size = (unsigned)ov->data.size();
+                    return ov->data.data();
+                }
+                // Sections may move between languages. Images start at the
+                // lowest supported base, just as the address-only watch tables do.
+                if (ov->ram < base || ov->ram - base > 0x400000) return nullptr;
+                auto& image = images[id];
+                image.assign(std::max<size_t>(PortableOverlaySize(id), ov->ram - base + ov->data.size()), 0);
+                std::copy(ov->data.begin(), ov->data.end(), image.begin() + (ov->ram - base));
+                *size = (unsigned)image.size();
+                return image.data();
+            }
+        } portableRom;
         char code[4] = {};
         if (FILE* f = fopen(opt.rom.c_str(), "rb"))
         {
             if (fseek(f, 0x0C, SEEK_SET) != 0 || fread(code, 1, 4, f) != 4) memset(code, 0, 4);
             fclose(f);
         }
-        if (overlays.Open(opt.rom))
+        if (portableRom.overlays.Open(opt.rom))
             rc_portable_load(code, [](void* user, int id, unsigned* size) -> const unsigned char* {
-                const NdsOverlays::Overlay* ov = static_cast<NdsOverlays*>(user)->Get((uint32_t)id);
-                if (!ov) return nullptr;
-                *size = (unsigned)ov->data.size();
-                return ov->data.data();
-            }, &overlays);
+                return static_cast<PortableRom*>(user)->Read(id, size);
+            }, &portableRom);
         else
             fprintf(stderr, "[recomp] cannot read the overlays of %s\n", opt.rom.c_str());
     }

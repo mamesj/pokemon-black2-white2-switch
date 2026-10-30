@@ -30,7 +30,16 @@ struct PtFuncs
             return std::abs((int)((c >> 16) & 0xFF) - r) < 40 && std::abs((int)((c >> 8) & 0xFF) - g) < 40 &&
                    std::abs((int)(c & 0xFF) - b) < 40;
         };
-        if (is(108, 76, 251, 89, 89) && is(132, 84, 251, 89, 89) && is(108, 116, 73, 154, 219) && is(132, 124, 73, 154, 219))
+        // Count the buttons' coloured fill, not individual pixels through the
+        // lettering: French OUI/NON covers pixels that English YES/NO leaves red/blue.
+        auto fill = [&](int y, int r, int g, int b) {
+            int count = 0;
+            for (int row = y; row < y + 22; row++)
+                for (int x = 100; x < 140; x++)
+                    count += is(x, row, r, g, b);
+            return count;
+        };
+        if (fill(70, 251, 89, 89) >= 250 && fill(110, 73, 154, 219) >= 250)
             return INTRO_YESNO;
         if (is(100, 70, 219, 97, 97) && is(156, 70, 219, 97, 97) && is(128, 60, 219, 97, 97) && is(100, 120, 251, 251, 251) &&
             is(156, 120, 251, 251, 251) && is(128, 130, 251, 251, 251) && is(128, 96, 211, 227, 251))
@@ -106,7 +115,7 @@ struct PtFuncs
             if (fseek(f, 0x0C, SEEK_SET) != 0 || fread(code, 1, 4, f) != 4) code[0] = 0;
             fclose(f);
         }
-        on = !strcmp(code, "CPUE");
+        on = !strcmp(code, "CPUE") || !strcmp(code, "CPUF");
         if (!on) return;
         auto find = [&](const char* name) {
             names.push_back(name);

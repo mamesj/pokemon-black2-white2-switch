@@ -56,12 +56,19 @@ inline const KnownGame* Known(const std::string& code)
 {
     static const KnownGame games[] = {
         { "IRBO", "Pokemon Black", "black.sav" },
+        { "IRBF", "Pokemon Black (FR)", "black-fr.sav" },
         { "IRAO", "Pokemon White", "white.sav" },
+        { "IRAF", "Pokemon White (FR)", "white-fr.sav" },
         { "IREO", "Pokemon Black 2", "black2.sav" },
+        { "IREF", "Pokemon Black 2 (FR)", "black2-fr.sav" },
         { "IRDO", "Pokemon White 2", "white2.sav" },
+        { "IRDF", "Pokemon White 2 (FR)", "white2-fr.sav" },
         { "IPKE", "Pokemon HeartGold", "heartgold.sav" },
+        { "IPKF", "Pokemon HeartGold (FR)", "heartgold-fr.sav" },
         { "IPGE", "Pokemon SoulSilver", "soulsilver.sav" },
+        { "IPGF", "Pokemon SoulSilver (FR)", "soulsilver-fr.sav" },
         { "CPUE", "Pokemon Platinum", "platinum.sav" },
+        { "CPUF", "Pokemon Platinum (FR)", "platinum-fr.sav" },
     };
     for (const KnownGame& g : games)
         if (code == g.code) return &g;
@@ -71,7 +78,7 @@ inline int Order(const std::string& code)
 {
     static const char* order[] = { "IRBO", "IRAO", "IREO", "IRDO", "IPKE", "IPGE", "CPUE" };
     for (int i = 0; i < 7; i++)
-        if (code == order[i]) return i;
+        if (code == order[i] || (code.size() == 4 && code[3] == 'F' && code.compare(0, 3, order[i], 3) == 0)) return i;
     return 7;
 }
 
