@@ -42,7 +42,7 @@ cartridge. Copy it in under the game's name, in this folder:
 |---|---|
 | Black 2 / White 2 | `black2.sav` / `white2.sav` |
 | Black / White | `black.sav` / `white.sav` |
-| SoulSilver / HeartGold | `soulsilver.sav` / `heartgold.sav` |
+| SoulSilver / HeartGold | `soulsilver.sav` / `heartgold.sav` (Italian: `heartgold-it.sav`) |
 | Platinum | `platinum.sav` |
 
 - **Which files work:** a plain `.sav`, as melonDS, DeSmuME (Export Backup
@@ -61,7 +61,7 @@ controller, or SETTINGS at the top), or in the pause menu while you play (**Esc*
 
 | Group | Settings |
 |---|---|
-| DISPLAY | SCREEN LAYOUT (MERGED: the one widescreen picture), LARGE SCREEN, BORDERLESS FULLSCREEN, SMOOTH SCALING, BATTLE BUTTONS, FPS COUNTER |
+| DISPLAY | SCREEN LAYOUT (MERGED: the one widescreen picture), LARGE SCREEN, BORDERLESS FULLSCREEN, SMOOTH SCALING, BATTLE BUTTONS, FPS COUNTER, LANGUAGE (AUTO follows your system: English or Italian) |
 | GRAPHICS | 60 FPS, WIDESCREEN WORLD, WIDE MAP LOADING, 3D RESOLUTION (WORLD DETAIL on the Switch), LOWER RES WHEN BUSY, WORLD ON GPU, FAST FORWARD LOW RES |
 | CONTROLS | **KEYS AND BUTTONS** (give any DS button, the pause menu, fast forward or swapping the screens another key or controller button), START BUTTON, BUTTONS, STICK TOUCH CURSOR |
 | SHORTCUTS | DESKTOP SHORTCUTS (PC), HOME MENU ICONS (Switch): a shortcut for each game |
@@ -354,8 +354,8 @@ speed; please tell us how yours runs (see [Reporting a bug](#reporting-a-bug)).
 |---|---|
 | ![HeartGold: Totodile against a wild Pidgey on Route 29, with FIGHT, BAG, RUN, POKÉMON and the party beside the battle](docs/screenshots/heartgold-totodile-battle.jpg) | ![SoulSilver: Lugia following you along Route 7](docs/screenshots/soulsilver-lugia-following.jpg) |
 
-- **ROMs:** the English US versions. Other versions start, but without the
-  one-screen layouts.
+- **ROMs:** the English US versions, and HeartGold in Italian. Other versions
+  start, but without the one-screen layouts.
 - **Saves:** `soulsilver.sav` and `heartgold.sav` (the same format, so either
   game reads the other's).
 - **What you get:** Johto and Kanto in widescreen, with your partner Pokémon
@@ -405,8 +405,8 @@ OLED in handheld mode; a PC has room to spare, and draws the same picture up to
 
 ## Known limits
 
-- Black, White, Black 2 and White 2: English (US/Europe) versions only. SoulSilver,
-  HeartGold and Platinum: US versions only.
+- Black, White, Black 2 and White 2: English (US/Europe) versions only. SoulSilver
+  and Platinum: US versions only; HeartGold: US and Italian.
 - Platinum: the Pokétch (the watch on the touch screen) isn't shown during
   normal play; its apps are one press of the screen-swap button away.
 - SoulSilver and HeartGold: at map borders (Route 29 and New Bark Town, Celadon
@@ -444,7 +444,8 @@ version and the **`game.log`** file, which says what the program did:
 A screenshot or short video helps too. Please never attach your ROM. A white or
 black screen when a game starts usually means the ROM isn't one the program
 plays: an English copy of Black, White, Black 2 or White 2 (US or Europe), or
-the English US copy of SoulSilver, HeartGold or Platinum, unchanged (no
+the English US copy of SoulSilver, HeartGold or Platinum (or the Italian
+HeartGold), unchanged (no
 patches, translations, randomizers or trimming).
 
 ## Support

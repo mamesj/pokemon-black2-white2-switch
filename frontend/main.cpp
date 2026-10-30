@@ -1388,6 +1388,7 @@ struct Settings
             else if (k == "wide_gpu") wideGpu = v == "1";
             else if (k == "ds3d_gpu") ds3dGpu = v != "0";
             else if (k == "battle_buttons") battleButtons = v == "corner" ? 0 : v == "panel" ? 2 : 1;
+            else if (k == "language") Lang::Set(v); // (the menus' language: lang.h)
             else if (k == "window")
             {
                 const size_t x = v.find('x');
@@ -1421,6 +1422,7 @@ struct Settings
         f << "ff_low_res=" << (ffLowRes ? 1 : 0) << "\n";
         f << "start_button=" << (startMenu ? "menu" : "ds") << "\n";
         f << "battle_buttons=" << (battleButtons == 0 ? "corner" : battleButtons == 2 ? "panel" : "strip") << "\n";
+        f << "language=" << Lang::Choice() << "\n";
         controls.Save(f);
 #ifdef SSR_PC_LAUNCHER
         if (windowW > 0 && windowH > 0) f << "window=" << windowW << "x" << windowH << "\n";
@@ -1568,8 +1570,9 @@ int main(int argc, char** argv)
     std::vector<uint8_t> rom = ReadFile(opt.rom);
     FuncWatch::RomPath = opt.rom; // (for a function table that reads its first bytes from it)
     // Pokemon SoulSilver (US): its new game's first menu is skipped (see where keys are sent).
-    // (HeartGold too: the same game where it matters here.)
-    const bool soulSilverRom = rom.size() > 0x10 && (memcmp(&rom[0x0C], "IPGE", 4) == 0 || memcmp(&rom[0x0C], "IPKE", 4) == 0);
+    // (HeartGold too, the Italian one included: the same game where it matters here.)
+    const bool soulSilverRom = rom.size() > 0x10 && (memcmp(&rom[0x0C], "IPGE", 4) == 0 || memcmp(&rom[0x0C], "IPKE", 4) == 0 ||
+        memcmp(&rom[0x0C], "IPKI", 4) == 0);
     if (rom.empty())
     {
         fprintf(stderr, "cannot read ROM: %s\n", opt.rom.c_str());
@@ -1642,10 +1645,11 @@ int main(int argc, char** argv)
             fclose(f);
         }
         if (overlays.Open(opt.rom))
-            rc_portable_load(code, [](void* user, int id, unsigned* size) -> const unsigned char* {
+            rc_portable_load(code, [](void* user, int id, unsigned* size, unsigned* ram) -> const unsigned char* {
                 const NdsOverlays::Overlay* ov = static_cast<NdsOverlays*>(user)->Get((uint32_t)id);
                 if (!ov) return nullptr;
                 *size = (unsigned)ov->data.size();
+                *ram = ov->ram;
                 return ov->data.data();
             }, &overlays);
         else
@@ -3868,7 +3872,7 @@ int main(int argc, char** argv)
         M_RESUME, M_LAYOUT, M_LARGE, M_FPS60, M_FULLSCREEN, M_SMOOTH, M_WIDE, M_WIDEMAP, M_BATTLEBUTTONS,
         M_WIDELINES, M_AUTODETAIL, M_WIDEGPU, M_GPU3D, M_SHOWFPS, M_BUTTONS, M_PADTOUCH, M_EMULATION,
         M_CONTROLS, M_STARTBTN, M_FAST, M_FFLOWRES, M_SAVESTATE, M_LOADSTATE, M_RESET, M_QUIT,
-        M_DISPLAY, M_GRAPHICS, M_CONTROLMENU, M_BACK, M_CHEATS, M_NOTHING,
+        M_DISPLAY, M_GRAPHICS, M_CONTROLMENU, M_BACK, M_CHEATS, M_NOTHING, M_LANGUAGE,
         M_CHEAT0 = 1000 // (M_CHEAT0 + i: cheat i, CHEATS)
     };
     enum { PAGE_MAIN, PAGE_KEYS, PAGE_DISPLAY, PAGE_GRAPHICS, PAGE_CONTROLS, PAGE_CHEATS };
@@ -3939,7 +3943,7 @@ int main(int argc, char** argv)
             add(M_DISPLAY, "DISPLAY", "");
             add(M_GRAPHICS, "GRAPHICS", "");
             add(M_CONTROLMENU, "CONTROLS", "");
-            add(M_CHEATS, "CHEATS", cheats.On() ? std::to_string(cheats.On()) + " ON" : "");
+            add(M_CHEATS, "CHEATS", cheats.On() ? std::to_string(cheats.On()) + Lang::Tr(" ON") : "");
             add(M_RESET, "RESET GAME", "");
             add(M_QUIT, "QUIT", "");
         }
@@ -3960,6 +3964,7 @@ int main(int argc, char** argv)
             add(M_BATTLEBUTTONS, "BATTLE BUTTONS",
                 !funcWatchOn || pt.on ? "-" : cfg.battleButtons == 2 ? "PANEL" : cfg.battleButtons == 0 || !bw1.on ? "CORNER" : "STRIP");
             add(M_SHOWFPS, "FPS COUNTER", onOff(cfg.showFps));
+            add(M_LANGUAGE, "LANGUAGE", Lang::ChoiceName());
             add(M_BACK, "BACK", "");
         }
         else if (menuPage == PAGE_GRAPHICS)
@@ -3968,7 +3973,7 @@ int main(int argc, char** argv)
             add(M_WIDE, "WIDESCREEN WORLD", onOff(cfg.wide));
             // (Black, White, Black 2 and White 2. The game sets its memory up for it as it
             // starts, so a change waits for the next start.)
-            add(M_WIDEMAP, "WIDE MAP LOADING", !bw2map.Supported() ? "-" : onOff(cfg.wideMap) + (cfg.wideMap != bw2map.on ? " (NEXT START)" : ""));
+            add(M_WIDEMAP, "WIDE MAP LOADING", !bw2map.Supported() ? "-" : Lang::Tr(onOff(cfg.wideMap)) + (cfg.wideMap != bw2map.on ? Lang::Tr(" (NEXT START)") : ""));
 #ifdef __SWITCH__
             add(M_WIDELINES, "WORLD DETAIL", std::to_string(detailLines[detailIndex()]));
             // ON: fewer lines than WORLD DETAIL for a moment where drawing them cannot keep up
@@ -4003,8 +4008,8 @@ int main(int argc, char** argv)
 #if SSR_MENU_EMULATION
             // Read when the game starts (SwitchPlatform::Start); a change waits for the next start.
             // FAST JIT: the JIT with fast memory.
-            add(M_EMULATION, "EMULATION", std::string(!cfg.jit ? "INTERPRETER" : cfg.fastMem ? "FAST JIT" : "JIT")
-                + (cfg.jit != UseJit || (cfg.jit && cfg.fastMem != UseFastMem) ? " (NEXT START)" : ""));
+            add(M_EMULATION, "EMULATION", Lang::Tr(!cfg.jit ? "INTERPRETER" : cfg.fastMem ? "FAST JIT" : "JIT")
+                + (cfg.jit != UseJit || (cfg.jit && cfg.fastMem != UseFastMem) ? Lang::Tr(" (NEXT START)") : ""));
 #endif
             add(M_BACK, "BACK", "");
         }
@@ -5202,6 +5207,10 @@ int main(int argc, char** argv)
 #endif
             case M_SHOWFPS:
                 cfg.showFps = !cfg.showFps;
+                break;
+            case M_LANGUAGE:
+                // AUTO, ENGLISH, ITALIANO, and round again (lang.h); kept with the other settings.
+                Lang::Set(Lang::Choice() == "auto" ? "en" : Lang::Choice() == "en" ? "it" : "auto");
                 break;
 #ifndef __SWITCH__
             case M_BUTTONS:
@@ -6435,7 +6444,7 @@ int main(int argc, char** argv)
             updateSaid = true;
             if (!UpdateCheck::g_newer.empty())
             {
-                say("VERSION " + UpdateCheck::g_newer + " IS OUT - REBUILD THE APP ON YOUR PC");
+                say(Lang::Tr("VERSION ") + UpdateCheck::g_newer + Lang::Tr(" IS OUT - REBUILD THE APP ON YOUR PC"));
                 toastUntil = frame + 600;
             }
         }
@@ -6464,7 +6473,7 @@ int main(int argc, char** argv)
             const int tsc = std::max(1, outH / 360);
             const std::string label = std::string(pads.Empty() ? Controls::KeyName(cfg.controls.Key(Controls::Y))
                 : Controls::InputName(cfg.controls.Pad(Controls::Y, cfg.byLabel), Controls::StyleOf(pads.controllers.empty() ? nullptr : pads.controllers[0])))
-                + ": RUN " + (shoesOn ? "ON" : "OFF");
+                + Lang::Tr(": RUN ") + Lang::Tr(shoesOn ? "ON" : "OFF");
             const int tw = Canvas::TextWidth(label, tsc);
             canvas.Fill(ox + (ow - tw) / 2 - 3 * tsc, oy + oh + 2 * tsc, tw + 6 * tsc, 11 * tsc, 0xC0000000);
             canvas.Text(ox + (ow - tw) / 2, oy + oh + 4 * tsc, label, tsc, 0xFFFFFFFF);
@@ -6473,13 +6482,14 @@ int main(int argc, char** argv)
         if (frame < toastUntil)
         {
             int sc = outH / 240 < 1 ? 1 : outH / 240;
-            const int tw = Canvas::TextWidth(toast, sc) + 8 * sc;
+            const std::string text = Lang::Tr(toast);
+            const int tw = Canvas::TextWidth(text, sc) + 8 * sc;
             // With on-screen controls, centred below their top row (L, MENU and R end at
             // 12% of the height) instead of under the L button.
             const bool controls = touchPadUsed && touchPad.visible;
             const int tx = controls ? (outW - tw) / 2 : 0, ty = controls ? outH * 13 / 100 : 0;
             canvas.Fill(tx, ty, tw, 13 * sc, 0xC0000000);
-            canvas.Text(tx + 4 * sc, ty + 3 * sc, toast, sc, 0xFFFFFFFF);
+            canvas.Text(tx + 4 * sc, ty + 3 * sc, text, sc, 0xFFFFFFFF);
             overlayUsed = true;
         }
         if (menu.open)
@@ -6488,17 +6498,17 @@ int main(int argc, char** argv)
             // ...), and as CONTROLS has them; with no controller, the keyboard's keys.
             const bool kbOnly = pads.Empty() && !(touchPadUsed && touchPad.visible);
             auto btn = [&](int a) {
-                return kbOnly ? std::string(a == Controls::A ? "ENTER" : "ESC")
+                return kbOnly ? Lang::Tr(a == Controls::A ? "ENTER" : "ESC")
                               : std::string(Controls::InputName(cfg.controls.Pad(a, cfg.byLabel),
                                     Controls::StyleOf(pads.controllers.empty() ? nullptr : pads.controllers[0])));
             };
             std::string hint = touchPadUsed && touchPad.visible ? "TAP: CHOOSE   OUTSIDE: BACK"
-                               : btn(Controls::A) + ": SELECT   " + btn(Controls::B) + ": BACK";
+                               : btn(Controls::A) + Lang::Tr(": SELECT") + "   " + btn(Controls::B) + Lang::Tr(": BACK");
             const int selId = menu.selected >= 0 && menu.selected < (int)menuIds.size() ? menuIds[menu.selected] : -1;
             static const char* pageTitle[] = { "", "KEYS AND BUTTONS", "DISPLAY", "GRAPHICS", "CONTROLS", "CHEATS" };
             if (menuPage == PAGE_KEYS)
             {
-                if (!(touchPadUsed && touchPad.visible)) hint = btn(Controls::A) + ": CHANGE   " + btn(Controls::B) + ": BACK";
+                if (!(touchPadUsed && touchPad.visible)) hint = btn(Controls::A) + Lang::Tr(": CHANGE") + "   " + btn(Controls::B) + Lang::Tr(": BACK");
                 if (capturing >= 0) hint = ctlKeyboard ? "ESC: LEAVE IT AS IT WAS" : "OR WAIT 5 SECONDS: AS IT WAS";
                 else if (menu.selected == 0 && ctlHasKeyboard) hint = "CHANGE: KEYBOARD OR CONTROLLER";
                 else if (menu.selected == ctlRow0 + Controls::SWAP) hint = "SWAPS WHICH SCREEN IS LARGE";
@@ -6519,7 +6529,7 @@ int main(int argc, char** argv)
             if (selId == M_CONTROLS) hint = "GIVE ANY BUTTON ANOTHER KEY OR BUTTON";
             if (selId == M_CHEATS) hint = cheats.items.empty() ? "NONE FOUND: SEE THE README" : "ACTION REPLAY CODES";
             if (selId == M_NOTHING) hint = "GET USRCHEAT.DAT: SEE THE README";
-            if (selId >= M_CHEAT0 && !(touchPadUsed && touchPad.visible)) hint = btn(Controls::A) + ": ON / OFF   " + btn(Controls::B) + ": BACK";
+            if (selId >= M_CHEAT0 && !(touchPadUsed && touchPad.visible)) hint = btn(Controls::A) + Lang::Tr(": ON / OFF") + "   " + btn(Controls::B) + Lang::Tr(": BACK");
             const std::string note = selId >= M_CHEAT0 && selId - M_CHEAT0 < (int)cheats.items.size() ? cheats.items[selId - M_CHEAT0].note : std::string();
             menu.Draw(canvas, pageTitle[menuPage], hint, note);
             }

@@ -69,7 +69,8 @@ struct RcPortable
 bool rc_register_portable(const RcPortable* tables);
 // Whether the tables are waiting for the code from the ROM (call rc_portable_load first).
 bool rc_portable_needed();
-// Reads the overlays' code through `overlay` (its bytes and size, or null when the ROM has no
-// such overlay) for a ROM with game code `code`. Returns the game's name, or null if the
-// tables do not know that game (then nothing is watched). Before rc_watch_attach and probes.
-const char* rc_portable_load(const char code[4], const unsigned char* (*overlay)(void* user, int id, unsigned* size), void* user);
+// Reads the overlays' code through `overlay` (its bytes, size and load address, or null when the
+// ROM has no such overlay) for a ROM with game code `code`. Returns the game's name, or null if
+// the tables do not know that game (then nothing is watched). Before rc_watch_attach and probes.
+const char* rc_portable_load(const char code[4], const unsigned char* (*overlay)(void* user, int id, unsigned* size, unsigned* ram),
+    void* user);

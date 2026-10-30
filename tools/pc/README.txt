@@ -6,7 +6,7 @@ the world drawn out to the sides of a 16:9 screen, 60 fps and controller support
 It plays your own copies of:
 
   Pokemon Black, White, Black 2 and White 2 (English, US or Europe)
-  Pokemon SoulSilver and HeartGold (US)
+  Pokemon SoulSilver and HeartGold (US; HeartGold in Italian too)
   Pokemon Platinum (US)
 
 Nothing of the games comes with this download: you need your own ROMs (.nds files).

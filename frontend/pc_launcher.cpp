@@ -242,7 +242,7 @@ void ExtractFuncs(const Folders& fo)
 bool Playable(const Folders& fo, const Launcher::Game& g)
 {
     if (!g.known) return false;
-    if (g.code == "IPGE" || g.code == "IPKE") return rc_num_chunks > 0;
+    if (Launcher::HeartSilver(g.code)) return rc_num_chunks > 0;
     return Exists(fo.funcs + "/" + g.code + ".txt");
 }
 
@@ -471,7 +471,7 @@ int PickGame(Folders& fo, std::vector<Launcher::Game>& games, int selected, bool
             std::string where;
             const int made = Shortcuts::Make(fo.dir, games, where);
             page.items[page.selected].values[0].second =
-                games.empty() ? "NO GAMES YET" : made > 0 ? std::to_string(made) + " MADE " + where : "FAILED: " + where;
+                games.empty() ? "NO GAMES YET" : made > 0 ? std::to_string(made) + Lang::Tr(" MADE ") + Lang::Tr(where) : Lang::Tr("FAILED: ") + Lang::Tr(where);
             return;
         }
 #endif
@@ -901,25 +901,26 @@ int PickGame(Folders& fo, std::vector<Launcher::Game>& games, int selected, bool
             return std::string(Controls::InputName(ctl.PadCustom() ? ctl.Pad(a, ctl.byLabel) : def,
                 Controls::StyleOf(pads.empty() ? nullptr : pads[0])));
         };
+        using Lang::Tr; // (the hints put together from pieces, each in the player's language: lang.h)
 #ifdef SSR_IOS
         const std::string hint = games.empty() ? std::string("FOLDER: YOUR ROMS FOLDER IN THE FILES APP")
-                               : padIn ? "TAP A GAME TWICE OR PRESS " + btn(Controls::A) + " TO PLAY    " + btn(Controls::Y) + ": SETTINGS"
+                               : padIn ? Tr("TAP A GAME TWICE OR PRESS ") + btn(Controls::A) + Tr(" TO PLAY") + "    " + btn(Controls::Y) + Tr(": SETTINGS")
                                        : std::string("TAP A GAME TWICE TO PLAY    SETTINGS: AT THE TOP");
-        const std::string pageHint = padIn ? "UP / DOWN: CHOOSE    " + btn(Controls::A) + ": CHANGE    " + btn(Controls::B) + ": BACK"
+        const std::string pageHint = padIn ? Tr("UP / DOWN: CHOOSE") + "    " + btn(Controls::A) + Tr(": CHANGE") + "    " + btn(Controls::B) + Tr(": BACK")
                                            : std::string("TAP AN OPTION THEN TAP AGAIN TO CHANGE    DRAG TO SCROLL");
 #elif defined(__ANDROID__)
-        const std::string hint = games.empty() ? "TAP OR PRESS " + (padIn ? btn(Controls::A) : std::string("A")) + " TO CHOOSE YOUR ROMS FOLDER    BACK: QUIT"
-                               : padIn ? "TAP A GAME TWICE OR PRESS " + btn(Controls::A) + " TO PLAY    " + btn(Controls::Y) + ": SETTINGS    BACK: QUIT"
+        const std::string hint = games.empty() ? Tr("TAP OR PRESS ") + (padIn ? btn(Controls::A) : std::string("A")) + Tr(" TO CHOOSE YOUR ROMS FOLDER") + "    " + Tr("BACK: QUIT")
+                               : padIn ? Tr("TAP A GAME TWICE OR PRESS ") + btn(Controls::A) + Tr(" TO PLAY") + "    " + btn(Controls::Y) + Tr(": SETTINGS") + "    " + Tr("BACK: QUIT")
                                        : std::string("TAP A GAME TWICE TO PLAY    SETTINGS: AT THE TOP    BACK: QUIT");
-        const std::string pageHint = padIn ? "UP / DOWN: CHOOSE    " + btn(Controls::A) + ": CHANGE    " + btn(Controls::B) + ": BACK"
+        const std::string pageHint = padIn ? Tr("UP / DOWN: CHOOSE") + "    " + btn(Controls::A) + Tr(": CHANGE") + "    " + btn(Controls::B) + Tr(": BACK")
                                            : std::string("TAP AN OPTION THEN TAP AGAIN TO CHANGE    DRAG TO SCROLL    BACK: DONE");
 #else
         const std::string hint = games.empty() ? std::string("O: OPEN THE ROMS FOLDER    H: SETTINGS    ESC: QUIT")
-                               : padIn ? btn(Controls::A) + ": PLAY    " + btn(Controls::Y) + ": SETTINGS    " + btn(Controls::B) + ": QUIT"
+                               : padIn ? btn(Controls::A) + Tr(": PLAY") + "    " + btn(Controls::Y) + Tr(": SETTINGS") + "    " + btn(Controls::B) + Tr(": QUIT")
                                        : std::string("ENTER: PLAY    H: SETTINGS    O: ROMS FOLDER    ESC: QUIT");
-        const std::string pageHint = page.group < 0 ? (padIn ? "UP / DOWN: CHOOSE    " + btn(Controls::A) + ": OPEN    " + btn(Controls::B) + ": BACK"
+        const std::string pageHint = page.group < 0 ? (padIn ? Tr("UP / DOWN: CHOOSE") + "    " + btn(Controls::A) + Tr(": OPEN") + "    " + btn(Controls::B) + Tr(": BACK")
                                                              : std::string("UP / DOWN: CHOOSE    ENTER: OPEN    ESC: BACK"))
-                                   : padIn ? "UP / DOWN: CHOOSE    LEFT / RIGHT / " + btn(Controls::A) + ": CHANGE    " + btn(Controls::B) + ": BACK"
+                                   : padIn ? Tr("UP / DOWN: CHOOSE") + "    " + Tr("LEFT / RIGHT / ") + btn(Controls::A) + Tr(": CHANGE") + "    " + btn(Controls::B) + Tr(": BACK")
                                            : std::string("UP / DOWN: CHOOSE    LEFT / RIGHT / ENTER: CHANGE    ESC: BACK");
 #endif
         static const Launcher::Theme theme;
@@ -929,7 +930,7 @@ int PickGame(Folders& fo, std::vector<Launcher::Game>& games, int selected, bool
             if (keysOpen)
             {
                 std::string kh = keysCapture >= 0 ? (keysKeyboard ? "ESC: LEAVE IT AS IT WAS" : "OR WAIT 5 SECONDS: AS IT WAS")
-                               : padIn ? btn(Controls::A) + ": CHANGE   " + btn(Controls::B) + ": BACK" : std::string("ENTER: CHANGE   ESC: BACK");
+                               : padIn ? btn(Controls::A) + Tr(": CHANGE") + "   " + btn(Controls::B) + Tr(": BACK") : std::string("ENTER: CHANGE   ESC: BACK");
                 if (keysCapture < 0 && keysMenu.selected == 0) kh = "CHANGE: KEYBOARD OR CONTROLLER";
                 keysMenu.Draw(canvas, "KEYS AND BUTTONS", kh);
             }
@@ -940,16 +941,17 @@ int PickGame(Folders& fo, std::vector<Launcher::Game>& games, int selected, bool
             // the settings; on Android FOLDER, to choose the ROM folder again.
             const int s = std::max(1, canvas.h / 240);
             // (The chosen one, by the D-pad: framed as a game is.)
-            auto button = [&](int x, const char* text, bool on) {
+            auto button = [&](int x, const std::string& text, bool on) {
                 if (on) canvas.Fill(x - 3 * s, 4 * s, Canvas::TextWidth(text, s) + 5 * s, 13 * s, theme.frame);
                 canvas.Text(x, 7 * s, text, s, on ? theme.title : theme.hint);
             };
-            if (guide) button(8 * s, "< BACK", onBack);
+            if (guide) button(8 * s, Lang::Tr("< BACK"), onBack);
             else
             {
-                button(canvas.w - 8 * s - Canvas::TextWidth("SETTINGS", s), "SETTINGS", onSettings);
+                const std::string settings = Lang::Tr("SETTINGS");
+                button(canvas.w - 8 * s - Canvas::TextWidth(settings, s), settings, onSettings);
 #ifdef SSR_PHONE
-                canvas.Text(8 * s, 7 * s, "FOLDER", s, theme.hint);
+                canvas.Text(8 * s, 7 * s, Lang::Tr("FOLDER"), s, theme.hint);
 #endif
             }
         }
@@ -963,7 +965,7 @@ int PickGame(Folders& fo, std::vector<Launcher::Game>& games, int selected, bool
                                     asking ? "WITH YOUR .NDS FILES. SAVES GO IN A SAVES FOLDER INSIDE IT." : fo.roms.c_str(),
                                     "",
                                     "IT PLAYS POKEMON BLACK / WHITE / BLACK 2 / WHITE 2 (ENGLISH)",
-                                    "SOULSILVER / HEARTGOLD / PLATINUM (US)" };
+                                    "SOULSILVER / HEARTGOLD / PLATINUM (US) / HEARTGOLD (ITALIAN)" };
             const char* heading = lines[0];
 #elif defined(SSR_IOS)
             const char* lines[] = { "NO GAMES FOUND", "",
@@ -971,19 +973,20 @@ int PickGame(Folders& fo, std::vector<Launcher::Game>& games, int selected, bool
                                     "> POKEMON DS WIDESCREEN > ROMS. TAP FOLDER AT THE TOP TO GO THERE.",
                                     "THEY SHOW UP HERE BY THEMSELVES.", "",
                                     "IT PLAYS POKEMON BLACK / WHITE / BLACK 2 / WHITE 2 (ENGLISH)",
-                                    "SOULSILVER / HEARTGOLD / PLATINUM (US)" };
+                                    "SOULSILVER / HEARTGOLD / PLATINUM (US) / HEARTGOLD (ITALIAN)" };
             const char* heading = lines[0];
 #else
             const char* lines[] = { "NO GAMES FOUND", "",
                                     "PUT YOUR ROMS IN THE ROMS FOLDER BESIDE THIS PROGRAM.", "THEY SHOW UP HERE BY THEMSELVES.", "",
                                     "IT PLAYS POKEMON BLACK / WHITE / BLACK 2 / WHITE 2 (ENGLISH)",
-                                    "SOULSILVER / HEARTGOLD / PLATINUM (US)" };
+                                    "SOULSILVER / HEARTGOLD / PLATINUM (US) / HEARTGOLD (ITALIAN)" };
             const char* heading = lines[0];
 #endif
             int y = canvas.h / 3;
-            for (const char* l : lines)
+            for (const char* line : lines)
             {
-                const int ls = l == heading ? s + 1 : s;
+                const std::string l = Lang::Tr(line);
+                const int ls = line == heading ? s + 1 : s;
                 int ts = ls;
                 while (ts > 1 && Canvas::TextWidth(l, ts) > canvas.w - 8) ts--;
                 canvas.Text((canvas.w - Canvas::TextWidth(l, ts)) / 2, y, l, ts, ls > s ? theme.title : theme.name);
@@ -1082,6 +1085,7 @@ bool Start(int& argc, char**& argv)
     MakeDir(fo.roms);
     MakeDir(fo.saves);
 #endif
+    Lang::Load(fo.cfg); // (the list's text in the language chosen in its settings: lang.h)
 
     // The log goes to game.log beside the program (the last game's is kept as game-previous.log:
     // QUIT starts the program again for the list, whose few lines would otherwise replace it).
@@ -1143,7 +1147,7 @@ bool Start(int& argc, char**& argv)
 #endif
     // SoulSilver and HeartGold take their layouts from the program's own tables and must not be
     // given a function table (one switches to the Black games' layouts); the others take theirs.
-    if (game.code != "IPGE" && game.code != "IPKE")
+    if (!Launcher::HeartSilver(game.code))
     {
         g_args.push_back("--funcs");
         g_args.push_back(fo.funcs + "/" + game.code + ".txt");

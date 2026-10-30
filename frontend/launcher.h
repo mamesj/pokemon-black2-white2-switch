@@ -60,6 +60,7 @@ inline const KnownGame* Known(const std::string& code)
         { "IREO", "Pokemon Black 2", "black2.sav" },
         { "IRDO", "Pokemon White 2", "white2.sav" },
         { "IPKE", "Pokemon HeartGold", "heartgold.sav" },
+        { "IPKI", "Pokemon HeartGold (IT)", "heartgold-it.sav" },
         { "IPGE", "Pokemon SoulSilver", "soulsilver.sav" },
         { "CPUE", "Pokemon Platinum", "platinum.sav" },
     };
@@ -69,10 +70,16 @@ inline const KnownGame* Known(const std::string& code)
 }
 inline int Order(const std::string& code)
 {
-    static const char* order[] = { "IRBO", "IRAO", "IREO", "IRDO", "IPKE", "IPGE", "CPUE" };
-    for (int i = 0; i < 7; i++)
+    static const char* order[] = { "IRBO", "IRAO", "IREO", "IRDO", "IPKE", "IPKI", "IPGE", "CPUE" };
+    for (int i = 0; i < 8; i++)
         if (code == order[i]) return i;
-    return 7;
+    return 8;
+}
+// SoulSilver and HeartGold (US, and the Italian HeartGold): the program's own tables give their
+// layouts (tools/soulsilver/*.json for the games other than SoulSilver), not a function table.
+inline bool HeartSilver(const std::string& code)
+{
+    return code == "IPGE" || code == "IPKE" || code == "IPKI";
 }
 
 inline bool EndsWithNds(const std::string& name)
@@ -430,15 +437,15 @@ inline int Draw(Canvas& c, const std::vector<Game>& games, int selected, int& fi
         const int ns = Canvas::TextWidth(name, s) <= tile ? s : std::max(1, s - 1);
         c.Text(x + (tile - Canvas::TextWidth(name, ns)) / 2, y + tile + 3 * s, name, ns, sel ? th.nameSel : th.name);
         if (sel && th.selBar) c.Fill(x + tile / 4, y + tile + 19 * s, tile / 2, s, th.selBar);
-        std::string sub = !g.known ? "NOT PLAYABLE" : g.hasSave ? "SAVE FOUND" : "NEW GAME";
-        if (!g.where.empty() && g.known) sub = (g.hasSave ? "SAVE " : "NEW ") + g.where; // e.g. SAVE IN BLACK2
+        std::string sub = Lang::Tr(!g.known ? "NOT PLAYABLE" : g.hasSave ? "SAVE FOUND" : "NEW GAME");
+        if (!g.where.empty() && g.known) sub = Lang::Tr(g.hasSave ? "SAVE " : "NEW ") + g.where; // e.g. SAVE IN BLACK2
         const int ss = std::max(1, s * 2 / 3);
         c.Text(x + (tile - Canvas::TextWidth(sub, ss)) / 2, y + tile + 12 * s, sub, ss, !g.known ? th.bad : sel ? th.subSel : th.sub);
     }
     // More games above or below the ones shown.
     if (first > 0) c.Fill(c.w / 2 - 8 * s, top - 4 * s, 16 * s, s, th.hint);
     if ((first + rows) * cols < (int)games.size()) c.Fill(c.w / 2 - 8 * s, bottom - 2 * s, 16 * s, s, th.hint);
-    const std::string hint = !note.empty() ? note : !hintText.empty() ? hintText : "A: PLAY    Y: SETTINGS    +: QUIT";
+    const std::string hint = Lang::Tr(!note.empty() ? note : !hintText.empty() ? hintText : "A: PLAY    Y: SETTINGS    +: QUIT");
     c.Text((c.w - Canvas::TextWidth(hint, s)) / 2, c.h - 12 * s, hint, s, th.hint);
     return cols;
 }
@@ -447,7 +454,8 @@ inline int Draw(Canvas& c, const std::vector<Game>& games, int selected, int& fi
 // options with what each does, set here before playing. They are written to the same settings
 // file the games read (main.cpp, Settings: keys, values and defaults must stay in step with it),
 // a line at a time, leaving the others as they are. Entries without a key are what can only be
-// done in the pause menu. The list's font has capitals, digits and : - + . / < > ! ( ) only.
+// done in the pause menu. The list's font has capitals, digits and : - + . / < > ! ( ) only
+// (and, for the translations, ' and accented capitals: lang.h).
 struct Setting
 {
     const char* key;  // nullptr: told about, not set here; "!...": something to do, not stored
@@ -509,6 +517,8 @@ inline std::vector<Setting> SettingsList()
 #endif
 #endif
     l.push_back({ "show_fps", "FPS COUNTER", onOff, "0", "SHOWS THE FRAMES A SECOND IN A CORNER." });
+    l.push_back({ "language", "LANGUAGE", { { "auto", "AUTO" }, { "en", "ENGLISH" }, { "it", "ITALIANO" } }, "auto",
+                  "THE LANGUAGE OF THESE MENUS. AUTO: AS YOUR SYSTEM IS SET (ITALIAN OR ENGLISH)." });
 #ifdef __SWITCH__
     l.push_back({ "start_button", "START BUTTON", { { "menu", "PAUSE MENU" }, { "ds", "DS START" } }, "menu",
                   "PAUSE MENU: + OPENS THE PAUSE MENU WHILE PLAYING. DS START: + IS THE DS START BUTTON (THE GAMES HARDLY USE IT) AND + AND - TOGETHER OPEN THE MENU." });
@@ -570,7 +580,7 @@ inline std::vector<std::string> Wrap(const std::string& text, int chars)
     std::string line, word;
     auto flush = [&]() {
         if (word.empty()) return;
-        if (!line.empty() && (int)(line.size() + 1 + word.size()) > chars)
+        if (!line.empty() && Canvas::Length(line) + 1 + Canvas::Length(word) > chars)
         {
             lines.push_back(line);
             line.clear();
@@ -609,7 +619,7 @@ inline const std::vector<SettingsGroup>& SettingsGroups()
 inline int GroupOf(const Setting& s)
 {
     if (!s.key) return !strcmp(s.name, "KEYS AND BUTTONS") ? 2 : 4;
-    static const char* display[] = { "view", "large_screen", "fullscreen", "smooth", "battle_buttons", "show_fps" };
+    static const char* display[] = { "view", "large_screen", "fullscreen", "smooth", "battle_buttons", "show_fps", "language" };
     static const char* controls[] = { "start_button", "buttons", "pad_touch" };
     for (const char* k : display)
         if (!strcmp(s.key, k)) return 0;
@@ -679,7 +689,7 @@ struct SettingsPage
             const SettingsGroup& sg = SettingsGroups()[g];
             std::string names;
             for (const Setting& s : all)
-                if (GroupOf(s) == g) names += (names.empty() ? "" : " / ") + std::string(s.name);
+                if (GroupOf(s) == g) names += (names.empty() ? "" : " / ") + Lang::Tr(s.name);
             groupText[g] = names + ".";
             items.push_back({ sg.key, sg.name, { { "", ">" } }, "", groupText[g].c_str() });
         }
@@ -772,6 +782,7 @@ struct SettingsPage
             for (const std::string& l : lines) fprintf(f, "%s\n", l.c_str());
             fclose(f);
         }
+        if (!strcmp(s.key, "language")) Lang::Set(s.values[next].first); // (this page too, at once)
         return s.key;
     }
 
@@ -784,7 +795,7 @@ struct SettingsPage
         c.Fill(0, 0, c.w, c.h, th.bg);
         c.Fill(0, 0, c.w, 22 * s, th.band);
         c.Fill(0, 22 * s, c.w, th.bandLineH * s, th.bandLine);
-        const std::string title = group < 0 ? "SETTINGS" : std::string("SETTINGS: ") + SettingsGroups()[group].name;
+        const std::string title = group < 0 ? Lang::Tr("SETTINGS") : Lang::Tr("SETTINGS: ") + Lang::Tr(SettingsGroups()[group].name);
         c.Text((c.w - Canvas::TextWidth(title, s + 1)) / 2, 6 * s, title, s + 1, th.title);
         const int width = std::min(c.w - 24 * s, 100 * 6 * ts);
         const int x = (c.w - width) / 2;
@@ -801,8 +812,8 @@ struct SettingsPage
                 infoHeading = true;
             }
             if (i == selected) selFirst = (int)out.size();
-            out.push_back({ e.name, e.key ? Shown(e) : "", i, true });
-            for (const std::string& l : Wrap(e.text, width / (6 * ts) - 2)) out.push_back({ l, "", i, false });
+            out.push_back({ Lang::Tr(e.name), e.key ? Lang::Tr(Shown(e)) : "", i, true });
+            for (const std::string& l : Wrap(Lang::Tr(e.text), width / (6 * ts) - 2)) out.push_back({ l, "", i, false });
             if (i == selected) selLast = (int)out.size() - 1;
             out.push_back({ "", "", -1, false });
         }
@@ -839,7 +850,8 @@ struct SettingsPage
         }
         if (scroll > 0) c.Fill(c.w / 2 - 8 * s, top - 4 * s, 16 * s, s, th.hint);
         if (scroll + fit < (int)out.size()) c.Fill(c.w / 2 - 8 * s, bottom + s, 16 * s, s, th.hint);
-        c.Text((c.w - Canvas::TextWidth(hint, s)) / 2, c.h - 12 * s, hint, s, th.hint);
+        const std::string h = Lang::Tr(hint);
+        c.Text((c.w - Canvas::TextWidth(h, s)) / 2, c.h - 12 * s, h, s, th.hint);
     }
 };
 

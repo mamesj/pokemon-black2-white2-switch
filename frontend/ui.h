@@ -7,6 +7,7 @@
 #include <cstring>
 #include <string>
 #include <vector>
+#include "lang.h"
 
 struct Canvas
 {
@@ -52,8 +53,23 @@ struct Canvas
                 px[(size_t)yy * w + xx] = argb;
     }
 
+    // The character of s at i, moving i past it: the accented letters of the translations
+    // (lang.h) are two bytes of UTF-8, given as their Latin-1 codes.
+    static int Next(const std::string& s, size_t& i)
+    {
+        const unsigned char c = (unsigned char)s[i++];
+        if (c == 0xC3 && i < s.size()) return 0xC0 | ((unsigned char)s[i++] & 0x3F);
+        return c;
+    }
+    static int Length(const std::string& s)
+    {
+        int n = 0;
+        for (size_t i = 0; i < s.size(); n++) Next(s, i);
+        return n;
+    }
+
     // 5x7 glyphs, one row per byte, bit 4 is the leftmost pixel.
-    static const uint8_t* Glyph(char c)
+    static const uint8_t* Glyph(int c)
     {
         static const uint8_t font[][7] = {
             { 0x0E, 0x11, 0x11, 0x1F, 0x11, 0x11, 0x11 }, // A
@@ -108,22 +124,35 @@ struct Canvas
             { 0x00, 0x0E, 0x11, 0x11, 0x11, 0x0E, 0x00 },
             { 0x00, 0x1F, 0x11, 0x11, 0x11, 0x1F, 0x00 },
             { 0x00, 0x04, 0x0A, 0x0A, 0x11, 0x1F, 0x00 },
+            // The apostrophe, and the accented capitals of Italian (the letter a row shorter,
+            // under its accent, grave to the left and acute to the right): À È É Ì Ò Ù.
+            { 0x04, 0x04, 0x08, 0x00, 0x00, 0x00, 0x00 },
+            { 0x0C, 0x0E, 0x11, 0x11, 0x1F, 0x11, 0x11 },
+            { 0x0C, 0x1F, 0x10, 0x1E, 0x10, 0x10, 0x1F },
+            { 0x06, 0x1F, 0x10, 0x1E, 0x10, 0x10, 0x1F },
+            { 0x0C, 0x0E, 0x04, 0x04, 0x04, 0x04, 0x0E },
+            { 0x0C, 0x0E, 0x11, 0x11, 0x11, 0x11, 0x0E },
+            { 0x0C, 0x11, 0x11, 0x11, 0x11, 0x11, 0x0E },
         };
         if (c >= 'a' && c <= 'z') c -= 32;
+        if (c >= 0xE0 && c <= 0xFE) c -= 0x20; // (à to À, ...)
         if (c >= 'A' && c <= 'Z') return font[c - 'A'];
         if (c >= '0' && c <= '9') return font[26 + c - '0'];
-        static const char punct[] = ":-+./<>!()\x01\x02\x03\x04";
-        const char* p = c ? strchr(punct, c) : nullptr;
+        static const int accented[] = { 0xC0, 0xC8, 0xC9, 0xCC, 0xD2, 0xD9 };
+        for (int i = 0; i < 6; i++)
+            if (c == accented[i]) return font[51 + i];
+        static const char punct[] = ":-+./<>!()\x01\x02\x03\x04'";
+        const char* p = c > 0 && c < 0x80 ? strchr(punct, c) : nullptr;
         return p ? font[36 + (p - punct)] : nullptr;
     }
 
-    static int TextWidth(const std::string& s, int scale) { return (int)s.size() * 6 * scale; }
+    static int TextWidth(const std::string& s, int scale) { return Length(s) * 6 * scale; }
 
     void Text(int x, int y, const std::string& s, int scale, uint32_t argb)
     {
-        for (char c : s)
+        for (size_t i = 0; i < s.size();)
         {
-            if (const uint8_t* g = Glyph(c))
+            if (const uint8_t* g = Glyph(Next(s, i)))
                 for (int row = 0; row < 7; row++)
                     for (int col = 0; col < 5; col++)
                         if (g[row] & (0x10 >> col))
@@ -190,9 +219,11 @@ struct Menu
     }
 
     // note: a few lines of text in a strip under the box (CHEATS: what the database says about
-    // the chosen cheat), wrapped to the box's width.
-    void Draw(Canvas& c, const std::string& title, const std::string& hint, const std::string& note = "") const
+    // the chosen cheat), wrapped to the box's width. (Title, rows and hint in the player's
+    // language: lang.h; the note is the database's own.)
+    void Draw(Canvas& c, const std::string& titleText, const std::string& hintText, const std::string& note = "") const
     {
+        const std::string title = Lang::Tr(titleText), hint = Lang::Tr(hintText);
         int scale = c.h / 240;
         if (scale < 1) scale = 1;
         int lineH = 11 * scale;
@@ -253,10 +284,10 @@ struct Menu
             bool sel = i == selected;
             if (sel) c.Fill(bx + 2 * scale, y - 2 * scale, boxW - 4 * scale, lineH, 0xFF3D6FD1);
             uint32_t col = sel ? 0xFFFFFFFF : 0xFFC8D0E0;
-            c.Text(bx + 6 * scale, y, items[i].label, scale, col);
+            c.Text(bx + 6 * scale, y, Lang::Tr(items[i].label), scale, col);
             if (!items[i].value.empty())
             {
-                std::string v = "< " + items[i].value + " >";
+                std::string v = "< " + Lang::Tr(items[i].value) + " >";
                 c.Text(bx + boxW - 6 * scale - Canvas::TextWidth(v, scale), y, v, scale, col);
             }
             y += lineH;

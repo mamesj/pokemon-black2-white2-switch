@@ -185,7 +185,7 @@ bool rc_register_portable(const RcPortable* tables)
 
 bool rc_portable_needed() { return portable && !portableLoaded; }
 
-const char* rc_portable_load(const char code[4], const unsigned char* (*overlay)(void*, int, unsigned*), void* user)
+const char* rc_portable_load(const char code[4], const unsigned char* (*overlay)(void*, int, unsigned*, unsigned*), void* user)
 {
     if (!portable) return nullptr;
     portableLoaded = true;
@@ -202,11 +202,14 @@ const char* rc_portable_load(const char code[4], const unsigned char* (*overlay)
     for (u32 s = 0; s < rc_num_sections; s++)
     {
         if (portable->overlayOf[s] < 0) continue;
-        unsigned size = 0;
-        const unsigned char* data = overlay(user, portable->overlayOf[s], &size);
+        unsigned size = 0, ram = 0;
+        const unsigned char* data = overlay(user, portable->overlayOf[s], &size, &ram);
         if (!data) { missing++; continue; }
         portableImages[s].assign(data, data + size);
         rc_sections[s].image = portableImages[s].data();
+        // (Loaded elsewhere in another game: the Italian HeartGold's main program is shorter.
+        // Its chunks' addresses are the shifted ones, so the image is placed where they are.)
+        rc_sections[s].base = ram;
         // (An overlay can be a little longer in another game: HeartGold's title screen.)
         if (size > rc_sections[s].size) rc_sections[s].size = size;
         loaded++;
